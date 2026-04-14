@@ -21,7 +21,7 @@ def _redis() -> RedisStore:
 
     return RedisStore(
         host=os.getenv("PIPELINE_REDIS_HOST", "localhost"),
-        port=int(os.getenv("PIPELINE_REDIS_PORT", "6379")),
+        port=int(os.getenv("PIPELINE_REDIS_PORT", "6380")),
         password=os.getenv("PIPELINE_REDIS_PASSWORD") or None,
     )
 
