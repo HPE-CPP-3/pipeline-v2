@@ -1,0 +1,95 @@
+# Model architecture configuration
+
+patchtst:
+  # Input patch size (time steps)
+  patch_size: 16
+  
+  # Patch stride (time steps)
+  patch_stride: 8
+  
+  # Number of transformer layers
+  n_layers: 3
+  
+  # Model dimension
+  d_model: 128
+  
+  # Number of attention heads
+  n_heads: 8
+  
+  # Feed-forward dimension
+  d_ff: 256
+  
+  # Dropout rate
+  dropout: 0.1
+  
+  # Activation function
+  activation: "gelu"
+  
+  # Number of forecast horizons
+  forecast_horizons:
+    - 5   # 5 minutes
+    - 10  # 10 minutes
+    - 15  # 15 minutes
+  
+  # Output quantiles
+  quantiles:
+    - 0.5  # p50 (median)
+    - 0.7  # p70
+    - 0.9  # p90
+
+# Training configuration
+training:
+  # Learning rate
+  lr: 0.001
+  
+  # Batch size
+  batch_size: 64
+  
+  # Number of epochs for full training
+  epochs: 100
+  
+  # Number of epochs for incremental training
+  incremental_epochs: 10
+  
+  # Learning rate for incremental training
+  incremental_lr: 0.0001
+  
+  # Validation split ratio
+  validation_split: 0.2
+  
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 10
+    min_delta: 0.001
+  
+  # Gradient clipping
+  gradient_clip: 1.0
+  
+  # Weight decay (L2 regularization)
+  weight_decay: 0.01
+
+# Loss function configuration
+loss:
+  type: "pinball"  # Quantile loss
+  
+  # Quantile weights (for multi-quantile training)
+  quantile_weights:
+    0.5: 1.0
+    0.7: 1.2
+    0.9: 1.5  # Higher weight for conservative forecasts
+
+# Model registry
+registry:
+  # Storage location (can be S3, GCS, or local path)
+  storage_path: "data/models"
+  
+  # Keep last N models
+  keep_last_n: 10
+  
+  # Model metadata to track
+  metadata:
+    - training_samples
+    - training_duration
+    - validation_mae
+    - feature_names

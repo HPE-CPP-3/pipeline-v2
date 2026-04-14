@@ -1,0 +1,88 @@
+# Storage configuration
+
+# Redis settings
+redis:
+  host: "localhost"
+  port: 6379
+  password: null
+  db: 0
+  
+  # Feature cache
+  features:
+    # TTL for feature cache (seconds)
+    ttl_seconds: 7200  # 120 minutes
+    
+    # Proactive refresh interval (seconds)
+    refresh_interval_seconds: 60
+    
+    # Inference window (minutes)
+    window_minutes: 90
+  
+  # Event storage
+  events:
+    # TTL for event data (seconds)
+    ttl_seconds: 259200  # 72 hours (3 days)
+    
+    # Maximum history size (last N events per pod:type)
+    history_max_size: 100
+  
+  # Model cache
+  model:
+    # TTL for cached model (seconds)
+    ttl_seconds: 86400  # 24 hours
+  
+  # Drift detection state
+  drift:
+    # TTL for EMA state (seconds)
+    ttl_seconds: 604800  # 7 days
+
+# CSV storage (live append-only training/analysis data)
+csv:
+  # Base path for CSV files
+  base_path: "data/csv"
+
+  # Subdirectories
+  metrics_dir: "metrics"
+  predictions_dir: "predictions"
+
+  # Retention period (days)
+  retention_days: 30
+
+# Prometheus writer (for predictions)
+prometheus_writer:
+  # Enable/disable writing to Prometheus
+  enabled: true
+  
+  # Pushgateway URL (if using pushgateway)
+  pushgateway_url: null
+  
+  # Or use remote write
+  remote_write_url: null
+  
+  # Metric labels to add
+  labels:
+    app: "pipeline-v2"
+    component: "prediction"
+
+# InfluxDB 2.x (long-term telemetry store)
+influxdb:
+  url: "http://localhost:8086"
+  org: "pipeline-v2"
+  bucket: "metrics"
+  token: "${INFLUXDB_TOKEN}"
+  
+  # Retention policies per measurement (days)
+  retention:
+    metrics: 30
+    predictions: 90
+    decisions: 365
+    feedback: 180
+  
+  # Downsampling for long-term storage
+  downsampling:
+    enabled: true
+    intervals:
+      - resolution: "5m"
+        retention: "90d"
+      - resolution: "1h"
+        retention: "365d"

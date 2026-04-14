@@ -1,0 +1,40 @@
+# Prometheus connection
+prometheus:
+  # Prometheus server URL
+  url: "http://localhost:9090"
+  
+  # Query timeout (seconds)
+  timeout_seconds: 30
+  
+  # Max retries for failed queries
+  max_retries: 3
+  
+  # Retry delay (seconds)
+  retry_delay_seconds: 2
+
+# Redis connection
+redis:
+  host: "localhost"
+  port: 6379
+  password: null
+  db: 0
+  
+  # Connection pool
+  max_connections: 50
+  
+  # Socket timeout (seconds)
+  socket_timeout: 5
+  
+  # Socket connect timeout (seconds)
+  socket_connect_timeout: 5
+
+# Ingestion settings
+ingestion:
+  # Proactive refresh interval (seconds)
+  refresh_interval_seconds: 60
+  
+  # Number of concurrent pods to process
+  concurrency: 10
+  
+  # Batch size for Prometheus queries
+  query_batch_size: 100

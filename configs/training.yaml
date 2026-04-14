@@ -1,0 +1,83 @@
+# Training scheduler configuration
+
+training:
+  # Base model training
+  base_model:
+    # Train base model every N hours
+    interval_hours: 24
+    
+    # Data source: "csv"
+    data_source: "csv"
+    
+    # Lookback window for base model (hours)
+    lookback_hours: 48
+    
+    # Minimum data required (hours)
+    min_data_hours: 24
+  
+  # Incremental training
+  incremental:
+    # Train incremental model every N hours
+    interval_hours: 6
+    
+    # Lookback window (minutes)
+    lookback_minutes: 90
+    
+    # Number of epochs
+    epochs: 10
+    
+    # Learning rate
+    learning_rate: 0.0001
+
+# Drift detection configuration
+drift:
+  # EMA smoothing factor (0.0-1.0)
+  # Lower = more smoothing, slower adaptation
+  # Higher = less smoothing, faster adaptation
+  ema_alpha: 0.1
+  
+  # Z-score threshold for drift detection
+  # Higher = less sensitive, fewer false positives
+  # Lower = more sensitive, more frequent triggers
+  z_score_threshold: 3.0
+  
+  # Feature ratio threshold (fraction of features that must be drifting)
+  # 0.2 = 20% of features must show drift to trigger retraining
+  feature_ratio_threshold: 0.2
+  
+  # Minimum features to monitor (avoid triggering on tiny workloads)
+  min_features_monitored: 5
+  
+  # Cooldown period after drift-triggered retrain (minutes)
+  cooldown_minutes: 30
+  
+  # Features to exclude from drift detection (noisy metrics)
+  exclude_features:
+    - "spike_indicator"
+    - "instantaneous_rate"
+
+# Prediction error tracking
+error_tracking:
+  # Quantile to compare (p50 = median forecast)
+  quantile: 0.5
+  
+  # Baseline window (rolling MAE over last 24h)
+  baseline_window_hours: 24
+  
+  # Error spike threshold (current MAE / baseline MAE)
+  # 2.0 = trigger if current error is 2x the baseline
+  spike_threshold: 2.0
+  
+  # Minimum samples for baseline (avoid cold-start issues)
+  min_baseline_samples: 100
+
+# Scheduler global settings
+scheduler:
+  # Cooldown between any retraining (prevents thrashing)
+  global_cooldown_minutes: 30
+  
+  # Max retrains per day (safety limit)
+  max_retrains_per_day: 8
+  
+  # Timezone for scheduling
+  timezone: "UTC"
