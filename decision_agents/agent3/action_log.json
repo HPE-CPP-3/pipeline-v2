@@ -1,0 +1,21 @@
+{
+  "recommended_action": "scale_up",
+  "current_replicas": 2,
+  "recommended_replicas": 3,
+  "confidence": 0.73,
+  "cpu_forecast_p50_5m": 0.6,
+  "cpu_forecast_p90_5m": 0.82,
+  "cpu_forecast_p90_15m": 0.91,
+  "memory_forecast_p50_5m": 0.55,
+  "memory_forecast_p90_5m": 0.76,
+  "memory_forecast_p90_15m": 0.88,
+  "throttle_risk_level": "HIGH",
+  "oom_risk_level": "HIGH",
+  "throttle_prob": 0.8721,
+  "oom_prob": 0.7634,
+  "reason": "CPU throttle risk is HIGH (p90=91% of limit). Memory OOM risk is HIGH (p90=88% of limit). Scaling from 2 -> 3 replicas to maintain <=70% utilization.",
+  "namespace": "test-workload",
+  "pod": "stress-test-app-abc123",
+  "container": "stress-container",
+  "timestamp": "2026-04-17T05:48:46.450096+00:00"
+}

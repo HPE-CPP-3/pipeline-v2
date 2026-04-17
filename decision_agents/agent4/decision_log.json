@@ -1,0 +1,13 @@
+{
+  "outcome": "REJECTED",
+  "approved_replicas": 2,
+  "flags": [
+    "low_confidence",
+    "aggressive_scale",
+    "high_memory_risk"
+  ],
+  "rule_explanation": "Rule engine evaluated 3 flag(s): ['low_confidence', 'aggressive_scale', 'high_memory_risk']",
+  "llm_reasoning": "LLM unreachable, defaulting to safe hold.",
+  "final_explanation": "LLM rejected the scaling action. Maintaining current replica count of 2.",
+  "timestamp": "2026-04-17T05:49:15.534494+00:00"
+}

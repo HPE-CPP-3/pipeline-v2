@@ -1,0 +1,22 @@
+{
+  "namespace": "test-workload",
+  "pod": "stress-test-app-abc123",
+  "container": "stress-container",
+  "timestamp": "2026-04-16T22:00:00+00:00",
+
+  "cpu_forecast_p50_5m":  0.70,
+  "cpu_forecast_p90_5m":  0.82,
+  "cpu_forecast_p90_15m": 0.91,
+
+  "memory_forecast_p50_5m":  0.65,
+  "memory_forecast_p90_5m":  0.76,
+  "memory_forecast_p90_15m": 0.88,
+
+  "confidence": 0.45,
+
+  "current_replicas": 2,
+  "recommended_replicas": 6,
+  "recommended_action": "scale_up",
+
+  "reason": "CPU p90 forecast at 91% of limit over 15-minute window. Memory p90 at 88%. High resource pressure detected."
+}

@@ -1,0 +1,85 @@
+# Feature engineering configuration
+
+# Time windows for aggregations (minutes)
+windows:
+  short: 5
+  medium: 10
+  long: 30
+
+# Rolling statistics to compute
+rolling_stats:
+  - mean
+  - std
+  - min
+  - max
+
+# Lag features (minutes ago)
+lag_features:
+  - 1
+  - 5
+  - 10
+  - 30
+
+# Spike detection
+spike_detection:
+  # Minimum change ratio to consider as spike
+  threshold: 0.3
+  
+  # Comparison window (minutes)
+  lookback_minutes: 1
+
+# Pressure signal thresholds
+pressure:
+  cpu:
+    # Throttling ratio considered high
+    throttle_ratio_high: 0.1
+    # Usage vs limit ratio considered high
+    usage_limit_ratio_high: 0.9
+  memory:
+    # Memory pressure ratio considered high
+    usage_limit_ratio_high: 0.85
+    # Working set growth rate (per minute) considered high
+    growth_rate_high: 0.1
+
+# Efficiency metrics
+efficiency:
+  # Calculate usage vs request ratio
+  usage_vs_request: true
+  # Calculate usage vs limit ratio
+  usage_vs_limit: true
+  # Calculate CPU per pod
+  cpu_per_pod: true
+  # Calculate node load per pod
+  node_load_per_pod: true
+
+# Event-based features
+events:
+  # Track time since last restart
+  time_since_restart: true
+  # Track time since last scaling event
+  time_since_scaling: true
+  # Track time since last eviction
+  time_since_eviction: true
+  
+  # Event counting windows (hours)
+  count_windows:
+    - 1
+    - 6
+    - 24
+
+# Dynamic threshold configuration
+dynamic_threshold:
+  # Pod age threshold to be considered stable (hours)
+  stable_pod_age_hours: 4
+  
+  # Max restarts in 24h to be considered stable
+  stable_restart_threshold: 2
+  
+  # Blending alpha schedule (pod_age_hours -> alpha)
+  # alpha=0: pure workload baseline
+  # alpha=1: pure pod baseline
+  blending:
+    min_age_hours: 0
+    max_age_hours: 4
+    min_alpha: 0.0
+    max_alpha: 1.0

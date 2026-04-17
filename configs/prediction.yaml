@@ -1,0 +1,98 @@
+# Prediction configuration
+
+# Forecast settings
+forecast:
+  # Horizons to predict (minutes)
+  horizons:
+    - 5
+    - 10
+    - 15
+  
+  # Quantiles to output
+  quantiles:
+    - 0.5  # p50 (median)
+    - 0.7  # p70
+    - 0.9  # p90
+
+# Inference settings
+inference:
+  # Run inference every N seconds
+  interval_seconds: 60
+  
+  # Feature window for inference (minutes)
+  # Should match training window (60-120 min)
+  feature_window_minutes: 90
+  
+  # Minimum features required for prediction
+  min_features: 60
+  
+  # Batch predictions for multiple pods
+  batch_size: 50
+  
+  # Inference timeout (seconds)
+  timeout_seconds: 30
+
+# Risk calculation thresholds
+risk:
+  cpu:
+    # Throttle risk thresholds
+    throttle:
+      # p90 forecast vs limit ratio for critical risk
+      critical_ratio: 0.95
+      # p90 forecast vs limit ratio for high risk
+      high_ratio: 0.85
+      # Current throttling ratio considered risky
+      current_throttle_ratio_high: 0.1
+    
+    # CPU pressure thresholds
+    pressure:
+      # Usage vs limit ratio for high pressure
+      usage_limit_high: 0.9
+      # Usage vs request ratio for high pressure
+      usage_request_high: 1.0
+  
+  memory:
+    # OOM risk thresholds
+    oom:
+      # p90 forecast vs limit ratio for critical risk
+      critical_ratio: 0.95
+      # p90 forecast vs limit ratio for high risk
+      high_ratio: 0.85
+      # Memory failcnt threshold
+      failcnt_threshold: 1
+    
+    # Memory pressure thresholds
+    pressure:
+      # Usage vs limit ratio for high pressure
+      usage_limit_high: 0.85
+      # Working set growth rate (per minute) for high pressure
+      growth_rate_high: 0.1
+
+# Output settings
+output:
+  # Write predictions to Prometheus
+  prometheus:
+    enabled: true
+    # Metric name prefix
+    prefix: "pipeline_prediction"
+  
+  # Store predictions in Redis for fast access
+  redis:
+    enabled: true
+    ttl_seconds: 3600  # 1 hour
+  
+  # Store prediction history via API
+  history:
+    enabled: true
+    # Keep last N predictions per pod
+    keep_last_n: 1000
+
+# Alerting thresholds (for Prometheus alerts)
+alerting:
+  cpu_throttle_risk:
+    warning: 0.7
+    critical: 0.9
+  
+  memory_oom_risk:
+    warning: 0.7
+    critical: 0.9
