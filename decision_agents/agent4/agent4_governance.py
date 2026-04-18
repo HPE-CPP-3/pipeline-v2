@@ -14,12 +14,11 @@ Architecture:
 auto-approve  LLM Reasoning (mocked - swap in real API key if needed)
    │          │
    └────┬─────┘
-   Final Decision (printed to terminal + saved to decision_log.json)
+    Final Decision (printed to terminal + saved to decision_agents/agent4/decision_log.json)
 
 Run:
-  python agent4_governance.py
-  python agent4_governance.py --payload dummy_payload.json
-  python agent4_governance.py --payload my_custom_payload.json
+    python decision_agents/agent4/agent4_governance.py
+    python decision_agents/agent4/agent4_governance.py --payload decision_agents/agent4/dummy_payload.json
 """
 
 from __future__ import annotations
@@ -29,6 +28,7 @@ import json
 import logging
 import os
 import asyncio
+import socket
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from enum import Enum
@@ -43,6 +43,71 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("agent4.governance")
+
+
+def _add_file_logger(log_path: str, encoding: str = "utf-8") -> None:
+    """Mirror console logs into a file using the same format."""
+    root = logging.getLogger()
+    abs_path = os.path.abspath(log_path)
+    if any(isinstance(h, logging.FileHandler) and getattr(h, "baseFilename", "") == abs_path for h in root.handlers):
+        return
+
+    file_handler = logging.FileHandler(abs_path, encoding=encoding)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+    )
+    root.addHandler(file_handler)
+
+
+class _RedisSingleInstanceLock:
+    """Simple best-effort Redis lock so only one Agent 4 consumes the stream."""
+
+    def __init__(
+        self,
+        redis_host: str,
+        redis_port: int,
+        key: str,
+        ttl_seconds: int = 30,
+    ):
+        self.redis_host = redis_host
+        self.redis_port = redis_port
+        self.key = key
+        self.ttl_seconds = ttl_seconds
+        self.token = f"{socket.gethostname()}:{os.getpid()}"
+        self._redis = None
+
+    def acquire_or_exit(self) -> None:
+        import redis
+
+        self._redis = redis.Redis(host=self.redis_host, port=self.redis_port, decode_responses=True)
+        ok = self._redis.set(self.key, self.token, nx=True, ex=self.ttl_seconds)
+        if not ok:
+            current = self._redis.get(self.key)
+            raise SystemExit(
+                f"Another Agent 4 instance appears to be running (lock={self.key}, holder={current}). "
+                f"Stop the other instance or delete the key to proceed."
+            )
+
+    def refresh(self) -> None:
+        if not self._redis:
+            return
+        try:
+            val = self._redis.get(self.key)
+            if val == self.token:
+                self._redis.expire(self.key, self.ttl_seconds)
+        except Exception:
+            pass
+
+    def release(self) -> None:
+        if not self._redis:
+            return
+        try:
+            val = self._redis.get(self.key)
+            if val == self.token:
+                self._redis.delete(self.key)
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────
@@ -106,8 +171,20 @@ class RuleEngine:
         current_replicas  = payload.get("current_replicas", 1)
         recommended       = payload.get("recommended_replicas", current_replicas)
         action            = payload.get("recommended_action", "none")
-        cpu_p90_15m       = payload.get("cpu_forecast_p90_15m", 0.0)
-        memory_p90_15m    = payload.get("memory_forecast_p90_15m", 0.0)
+        cpu_p90_15m       = float(payload.get("cpu_forecast_p90_15m", 0.0) or 0.0)
+        memory_p90_15m_raw = float(payload.get("memory_forecast_p90_15m", 0.0) or 0.0)
+        memory_limit      = float(payload.get("memory_limit", 0.0) or 0.0)
+
+        # Memory forecast should normally be a ratio (~0..2). If it's huge, it's likely bytes.
+        if memory_p90_15m_raw > 10.0:
+            memory_p90_15m = (memory_p90_15m_raw / memory_limit) if memory_limit > 0 else None
+            if memory_p90_15m is None:
+                logger.info(
+                    "  [INFO] memory_p90_15m appears to be bytes but memory_limit is missing; "
+                    "skipping ratio-based memory governance rule"
+                )
+        else:
+            memory_p90_15m = memory_p90_15m_raw
 
         # Rule 1 — Low confidence flag
         if confidence < self.cfg.CONFIDENCE_LOW_THRESHOLD:
@@ -129,7 +206,7 @@ class RuleEngine:
                 )
 
         # Rule 3 — High memory pressure (even if CPU is okay)
-        if memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD:
+        if memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD:
             flags.append(FlagReason.HIGH_MEMORY_RISK)
             logger.info(
                 f"  [FLAG] {FlagReason.HIGH_MEMORY_RISK}: "
@@ -440,8 +517,18 @@ async def run_redis_mode(args):
     logger.info("Agent 4: Listening on stream:optimization:complete...")
     last_id = "$"  # Read only new messages
 
+    lock = _RedisSingleInstanceLock(
+        redis_host=args.redis_host,
+        redis_port=args.redis_port,
+        key=os.environ.get("PIPELINE_AGENT4_LOCK_KEY", "lock:agent4:governance"),
+        ttl_seconds=int(os.environ.get("PIPELINE_AGENT4_LOCK_TTL", "30")),
+    )
+    lock.acquire_or_exit()
+    logger.info("Agent 4 lock acquired.")
+
     try:
         while True:
+            lock.refresh()
             messages = await redis_store.read_stream_messages(
                 stream_name="stream:optimization:complete",
                 last_id=last_id,
@@ -462,6 +549,7 @@ async def run_redis_mode(args):
                     "cpu_forecast_p50_5m", "cpu_forecast_p90_5m", "cpu_forecast_p90_15m",
                     "memory_forecast_p50_5m", "memory_forecast_p90_5m", "memory_forecast_p90_15m",
                     "throttle_prob", "oom_prob",
+                    "cpu_limit", "memory_limit",
                 ):
                     if key in payload:
                         try:
@@ -504,6 +592,7 @@ async def run_redis_mode(args):
     except KeyboardInterrupt:
         logger.info("Stopping Agent 4 Redis loop.")
     finally:
+        lock.release()
         await redis_store.close()
 
 async def async_main(args):
@@ -539,6 +628,21 @@ def main():
         description="Agent 4: Governance and LLM Reasoning"
     )
     parser.add_argument(
+        "--log-file",
+        type=str,
+        default=os.environ.get(
+            "PIPELINE_AGENT4_LOG_FILE",
+            str(Path(__file__).resolve().parent / "agent4_log.txt"),
+        ),
+        help="Path to write Agent 4 logs (default: agent4_log.txt)",
+    )
+    parser.add_argument(
+        "--log-encoding",
+        type=str,
+        default=os.environ.get("PIPELINE_AGENT4_LOG_ENCODING", "utf-8"),
+        help="Log file encoding (default: utf-8; use utf-16 to mimic PowerShell-style logs)",
+    )
+    parser.add_argument(
         "--mode",
         type=str,
         choices=["file", "redis"],
@@ -554,7 +658,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="decision_log.json",
+        default=str(Path(__file__).resolve().parent / "decision_log.json"),
         help="(File mode) Path to write the governance decision JSON (default: decision_log.json)",
     )
     parser.add_argument(
@@ -576,6 +680,8 @@ def main():
         help="Groq API Key (default: $GROQ_API_KEY)",
     )
     args = parser.parse_args()
+
+    _add_file_logger(args.log_file, encoding=args.log_encoding)
     
     asyncio.run(async_main(args))
 

@@ -4,9 +4,14 @@ This guide explains how to run the decision-making agents (Agent 3: Resource Opt
 
 ## Prerequisites
 
-1. **Agents 1 and 2 must be running first**: Ensure that the ingestion and prediction pipeline is active and publishing data to Redis streams.
+1. **Agents 1 and 2 must be running first (unless you use `run_all_agents.sh`)**: Ensure that the ingestion and prediction pipeline is active and publishing data to Redis streams.
 2. **Redis must be running**: The agents communicate via Redis streams. Default configuration expects Redis on `localhost:6380`.
-3. **Python environment**: Install dependencies with `pip install -r requirements.txt` and `pip install -e .`
+3. **Python environment**: Install dependencies with either:
+  - `pip install -r scripts/requirements.txt` and `pip install -e .`, or
+  - `pip install -e .` (installs dependencies from `pyproject.toml`)
+4. **(Optional) Kubernetes integration for Agent 3**: If you want Agent 3 to query live Kubernetes for requests/limits and replica count, install:
+  - `pip install kubernetes`
+  Agent 3 will use in-cluster config when running inside Kubernetes, otherwise it will use your local kubeconfig (`~/.kube/config`).
 
 ## Agent Overview
 
@@ -22,11 +27,15 @@ First, start the data pipeline agents. You can run them together or separately:
 ### Run both agents together:
 ```bash
 pipeline-agentic \
+  --agent both \
   --namespace <namespace> \
   --pod <pod-name> \
   --container <container-name> \
-  --prometheus-url http://localhost:9090
+  --prometheus-url <prometheus-url>
 ```
+
+Notes:
+- In the dev cluster setup used in this repo, Prometheus is often exposed via NodePort (e.g. `http://localhost:30000`).
 
 ### Run ingestion only:
 ```bash
@@ -45,42 +54,24 @@ Set environment variables as needed:
 - `PIPELINE_REDIS_PORT=6380` (for local dev setup)
 - `INFLUXDB_URL`, `INFLUXDB_TOKEN`, etc. for InfluxDB storage
 
-## Running Agents 3 and 4
+## Run All 4 Agents With One Script (Mac/Linux)
 
-Once agents 1 and 2 are running and publishing to Redis streams, start the decision agents:
+If you want a single command to start the full pipeline (Agents 1→4), use:
 
-### Run Agents 3 and 4 Together
-
-Use the provided scripts to launch both decision agents simultaneously:
-
-**PowerShell (Windows):**
-```powershell
-# Run both agents
-powershell -ExecutionPolicy Bypass -File scripts\run_pipeline.ps1
-
-# Run only Agent 3
-powershell -ExecutionPolicy Bypass -File scripts\run_pipeline.ps1 -Agent 3
-
-# Run only Agent 4
-powershell -ExecutionPolicy Bypass -File scripts\run_pipeline.ps1 -Agent 4
-```
-
-**Bash (Linux/Mac):**
 ```bash
-# Run both agents
-bash scripts/run_pipeline.sh
-
-# Run only Agent 3
-bash scripts/run_pipeline.sh --agent 3
-
-# Run only Agent 4
-bash scripts/run_pipeline.sh --agent 4
+bash scripts/run_all_agents.sh \
+  --source prometheus \
+  --namespace <namespace> \
+  --pod <pod-name> \
+  --container <container-name> \
+  --prometheus-url <prometheus-url>
 ```
 
-These scripts will:
-- Start both agents in Redis streaming mode
-- Display the stream flow and PIDs
-- Provide a test command to inject sample data
+Or, for Prometheus-free local testing where Agent 1 reads raw metrics from Redis and Agent 2 predicts from the ingestion stream:
+
+```bash
+bash scripts/run_all_agents.sh --source redis
+```
 
 ### Individual Agent Commands
 
@@ -91,7 +82,9 @@ Alternatively, run each agent separately:
 Run in Redis streaming mode to listen for prediction events:
 
 ```bash
-python decision_agents/agent3/agent3_optimization.py --mode redis
+python decision_agents/agent3/agent3_optimization.py \
+  --mode redis \
+  --log-file decision_agents/agent3/agent3_log.txt
 ```
 
 Optional parameters:
@@ -102,13 +95,18 @@ Agent 3 will:
 - Listen on stream `stream:prediction:complete`
 - Apply four-branch optimization logic (scale_up, scale_down, retrain, hold)
 - Publish decisions to `stream:optimization:complete`
+- If `kubernetes` is installed and a cluster is reachable, it will also query live Kubernetes for:
+  - CPU/memory requests and limits for the target container
+  - Current live replica count from the Deployment
 
 #### Agent 4: Governance and LLM Reasoning
 
 Run in Redis streaming mode to listen for optimization decisions:
 
 ```bash
-python decision_agents/agent4/agent4_governance.py --mode redis
+python decision_agents/agent4/agent4_governance.py \
+  --mode redis \
+  --log-file decision_agents/agent4/agent4_log.txt
 ```
 
 Optional parameters:
@@ -152,7 +150,9 @@ This will trigger both agents to process the test data and output decisions.
 
 - **Web Interface**: Run `uvicorn src.agents.monitor_api:app --host 0.0.0.0 --port 8010` and visit `http://localhost:8010/`
 - **Logs**: Each agent outputs detailed logs to console
-- **Decision Logs**: Agents 3 and 4 save decisions to `action_log.json` and `decision_log.json` respectively
+- **Decision Logs**:
+  - Agent 3: `decision_agents/agent3/action_log.json` (+ `decision_agents/agent3/agent4_ready_payload.json`)
+  - Agent 4: `decision_agents/agent4/decision_log.json`
 - **Redis Streams**: Monitor streams with Redis CLI: `XREAD STREAMS stream:prediction:complete 0`
 
 ## Configuration
@@ -166,6 +166,10 @@ Key configuration files:
 
 - **No events received**: Ensure agents 1 and 2 are running and Redis is accessible
 - **Redis connection errors**: Check Redis port and host settings
+- **Agent 3 Kubernetes warnings**:
+  - If you see `kubernetes package not installed`, run `pip install kubernetes`.
+  - If you see `Could not connect to cluster`, verify your kubeconfig (`~/.kube/config`) or in-cluster ServiceAccount.
+  - If you see pod lookup warnings, Agent 3 derives its pod selector from the Deployment's `spec.selector.matchLabels` (fallback to `app=<deployment>`). If your deployment name/namespace/container changed, update the `TARGET_*` constants in `decision_agents/agent3/agent3_optimization.py`.
 - **LLM API errors**: For Agent 4, provide `GROQ_API_KEY` or it will use mock responses
 - **Model not found**: Ensure `data/models/patchtst_multi.pt` exists from training
 
@@ -177,5 +181,4 @@ Prometheus → Agent 1 → Redis → Agent 2 → Redis → Agent 3 → Redis →
    Metrics    Ingestion   Prediction  Optimization Governance   Action
 ```
 
-Each agent runs independently and communicates asynchronously through Redis streams, allowing for decoupled scaling and fault tolerance.</content>
-<parameter name="filePath">c:\Users\saima\Downloads\pipeline-v2-feature-workloadPredictionAgent\pipeline-v3\README.MD2
+Each agent runs independently and communicates asynchronously through Redis streams, allowing for decoupled scaling and fault tolerance.
