@@ -79,10 +79,7 @@ pypy-*/
 *.parquet
 *.pkl
 *.h5
-*.pt
 *.pth
-models/
-data/
 
 # Logs
 *.log

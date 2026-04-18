@@ -71,6 +71,11 @@ class OOMRiskCalculator:
         p90_10min = memory_forecast.get(10, {}).get(0.9, 0.0)
         p90_5min = memory_forecast.get(5, {}).get(0.9, 0.0)
 
+        if p90_15min < 1000 and memory_limit > 1_000_000:
+            p90_15min = p90_15min * memory_limit
+            p90_10min = p90_10min * memory_limit
+            p90_5min = p90_5min * memory_limit
+
         # Calculate ratios
         ratio_15min = p90_15min / memory_limit
         ratio_10min = p90_10min / memory_limit
@@ -148,3 +153,70 @@ class OOMRiskCalculator:
                 "failcnt_spike": failcnt_spike,
             },
         }
+
+    def calculate_risk_from_model_prob(
+        self,
+        oom_prob: float,
+        memory_forecast: dict[int, dict[float, float]],
+        memory_limit: float,
+        current_failcnt: int = 0,
+        working_set_growth_rate: Optional[float] = None,
+        failcnt_spike: Optional[float] = None,
+    ) -> dict:
+        """
+        Option A two-layer calculation: uses the model's learned OOM probability
+        as an early-warning signal, then enriches it with rule-based context
+        from the actual memory limit.
+
+        Args:
+            oom_prob: Sigmoid output of the model's oom_logit (0-1).
+                      High values mean the model detected a risk pattern from
+                      the historical sequence.
+            memory_forecast: Dict of horizon -> quantile -> value (de-normalized, in bytes)
+            memory_limit: Memory limit in bytes (from K8s resource limits, pre-normalization)
+            current_failcnt: Current memory fail count
+            working_set_growth_rate: Working set growth rate per minute (optional)
+            failcnt_spike: Recent spike in fail count (optional)
+
+        Returns:
+            Dict with all fields from calculate_risk(), plus:
+                - model_oom_prob: float — raw model probability
+                - source: str — "model+rules" to distinguish from pure rule-based
+        """
+        # Start with the rule-based analysis
+        result = self.calculate_risk(
+            memory_forecast=memory_forecast,
+            memory_limit=memory_limit,
+            current_failcnt=current_failcnt,
+            working_set_growth_rate=working_set_growth_rate,
+            failcnt_spike=failcnt_spike,
+        )
+
+        # Blend model probability into the result.
+        if memory_limit > 0:
+            rule_prob = result["probability"]
+
+            # Weighted blend: model gets 40%, rules get 60%
+            if oom_prob > 0.1:
+                blended_prob = 0.4 * oom_prob + 0.6 * rule_prob
+            else:
+                blended_prob = rule_prob
+            result["probability"] = round(blended_prob, 4)
+
+            # Model-driven escalation: if model is very confident but rules
+            # haven't caught up yet (temporal patterns before threshold breach).
+            if oom_prob >= 0.85 and result["oom_risk"] == "LOW":
+                result["oom_risk"] = "MEDIUM"
+                if result["estimated_time"] is None:
+                    result["estimated_time"] = "15+min"
+                result["reason"] += f" [model early-warning: prob={oom_prob:.2f}]"
+
+            elif oom_prob >= 0.85 and result["oom_risk"] == "MEDIUM":
+                result["oom_risk"] = "HIGH"
+                if result["estimated_time"] in (None, "15+min"):
+                    result["estimated_time"] = "10-15min"
+                result["reason"] += f" [model escalation: prob={oom_prob:.2f}]"
+
+        result["model_oom_prob"] = round(oom_prob, 4)
+        result["source"] = "model+rules"
+        return result

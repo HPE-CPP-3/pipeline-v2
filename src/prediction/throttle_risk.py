@@ -155,3 +155,75 @@ class ThrottleRiskCalculator:
                 "recent_cpu_spike": recent_cpu_spike,
             },
         }
+
+    def calculate_risk_from_model_prob(
+        self,
+        throttle_prob: float,
+        cpu_forecast: dict[int, dict[float, float]],
+        cpu_limit: float,
+        current_throttle_ratio: Optional[float] = None,
+        recent_cpu_spike: Optional[float] = None,
+    ) -> dict:
+        """
+        Option A two-layer calculation: uses the model's learned throttle probability
+        as an early-warning signal, then enriches it with rule-based context
+        from the actual CPU limit.
+
+        The model probability gates whether we escalate the rule-based level,
+        and is surfaced directly so operators can see both signals.
+
+        Args:
+            throttle_prob: Sigmoid output of the model's throttle_logit (0-1).
+                           High values mean the model learned a risk pattern from
+                           the historical sequence, even before thresholds are breached.
+            cpu_forecast: Dict of horizon -> quantile -> value (de-normalized, in cores)
+            cpu_limit: CPU limit in cores (from K8s resource limits, pre-normalization)
+            current_throttle_ratio: Current throttling ratio (optional)
+            recent_cpu_spike: Recent CPU spike magnitude (optional)
+
+        Returns:
+            Dict with all fields from calculate_risk(), plus:
+                - model_throttle_prob: float — raw model probability
+                - source: str — "model+rules" to distinguish from pure rule-based
+        """
+        # Start with the rule-based analysis
+        result = self.calculate_risk(
+            cpu_forecast=cpu_forecast,
+            cpu_limit=cpu_limit,
+            current_throttle_ratio=current_throttle_ratio,
+            recent_cpu_spike=recent_cpu_spike,
+        )
+
+        # Blend model probability into the result.
+        # The model acts as an early-warning signal: if it's highly confident
+        # but the forecast hasn't breached thresholds yet, we escalate.
+        if cpu_limit > 0:
+            rule_prob = result["probability"]
+
+            # Weighted blend: model gets 40% weight, rules get 60%
+            # Rules are more reliable when limits are known; model catches temporal patterns
+            if throttle_prob > 0.1:
+                blended_prob = 0.4 * throttle_prob + 0.6 * rule_prob
+            else:
+                blended_prob = rule_prob  # model hasn't learned this pattern yet, trust rules
+            result["probability"] = round(blended_prob, 4)
+
+            # Model-driven escalation: if the model is very confident (>0.85)
+            # but rules only say LOW/MEDIUM, bump up one level as a heads-up.
+            if throttle_prob >= 0.85 and result["risk_level"] == "LOW":
+                result["risk_level"] = "MEDIUM"
+                result["will_throttle"] = False
+                if result["time_to_throttle"] is None:
+                    result["time_to_throttle"] = "15+min"
+                result["reason"] += f" [model early-warning: prob={throttle_prob:.2f}]"
+
+            elif throttle_prob >= 0.85 and result["risk_level"] == "MEDIUM":
+                result["risk_level"] = "HIGH"
+                result["will_throttle"] = True
+                if result["time_to_throttle"] in (None, "15+min"):
+                    result["time_to_throttle"] = "10-15min"
+                result["reason"] += f" [model escalation: prob={throttle_prob:.2f}]"
+
+        result["model_throttle_prob"] = round(throttle_prob, 4)
+        result["source"] = "model+rules"
+        return result

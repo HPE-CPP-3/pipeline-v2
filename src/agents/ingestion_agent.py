@@ -1,18 +1,22 @@
-"""Plug-and-play log ingestion agent.
+"""Kubernetes log ingestion agent.
 
-Runs on a strict 60-second ticker and publishes normalized features to:
-- Redis (latest state + stream trigger)
-- InfluxDB (historical telemetry)
+Collects Prometheus metrics, normalises them, and publishes to:
+  - Redis feature store (normalised, for fast replay)
+  - InfluxDB (normalised, for long-term storage)
+  - CSV store (both normalised + raw, for fine-tuning)
+  - Redis Stream "stream:ingestion:complete" (with raw limits embedded so
+    the prediction agent can run rule-based calculators without re-querying
+    Prometheus)
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from datetime import datetime, timezone
 import json
 import logging
-from typing import Any
-
+from dataclasses import asdict
+from datetime import datetime, timezone
+from typing import Optional
+import numpy as np
 import pandas as pd
 
 from ..ingestion.prometheus_client import PrometheusClient
@@ -23,16 +27,23 @@ from .schemas import IngestionResult, PodScope, TargetConfig
 
 logger = logging.getLogger(__name__)
 
+# Raw limit column names as they come out of Prometheus / _add_derived_signals.
+# These are present in raw_df BEFORE rolling-minmax normalisation destroys them.
+_CPU_LIMIT_COL = "kube_pod_container_resource_limits_cpu"
+_MEM_LIMIT_COL = "kube_pod_container_resource_limits_memory"
+_THROTTLE_RATIO_COL = "derived_pressure_throttled_ratio"
+_MEM_FAIL_COL = "container_memory_failures_total"
+
 
 class LogIngestionAgent:
-    """Prometheus-backed ingestion service with plug-and-play target config."""
+    """Collect metrics from Prometheus and publish to all downstream stores."""
 
     def __init__(
         self,
         prometheus_client: PrometheusClient,
         redis_store: RedisStore,
         influxdb_store: InfluxDBStore,
-        csv_store: CSVStore | None = None,
+        csv_store: Optional[CSVStore] = None,
     ):
         self.prometheus = prometheus_client
         self.redis_store = redis_store
@@ -42,18 +53,18 @@ class LogIngestionAgent:
     async def collect(
         self, target_config: TargetConfig, window_minutes: int = 60
     ) -> IngestionResult:
-        """Collect container/node/k8s features for a target using dynamic PromQL mapping."""
+        """Collect raw metrics from Prometheus (no normalisation)."""
         namespace = target_config.namespace
         pod = target_config.pod_name
         container = target_config.container_name
 
         scope = PodScope(pod=pod, namespace=namespace, container=container)
 
-        # Container-level
+        # Note: Different methods have different parameter orders and names!
         cpu_usage = await self.prometheus.get_container_cpu_usage_seconds_total(
-            namespace=namespace,
-            pod_name=pod,
-            container_name=container,
+            namespace=namespace, 
+            pod_name=pod, 
+            container_name=container, 
             window_minutes=window_minutes,
         )
         cpu_throttled = await self.prometheus.get_container_cpu_throttled_seconds_total(
@@ -63,9 +74,9 @@ class LogIngestionAgent:
             window_minutes=window_minutes,
         )
         memory_ws = await self.prometheus.get_container_memory_working_set_bytes(
-            namespace=namespace,
-            pod_name=pod,
-            container_name=container,
+            namespace=namespace, 
+            pod_name=pod, 
+            container_name=container, 
             window_minutes=window_minutes,
         )
         memory_fail = await self.prometheus.get_container_memory_failures_total(
@@ -121,10 +132,23 @@ class LogIngestionAgent:
     async def collect_and_publish(
         self, target_config: TargetConfig, window_minutes: int = 60
     ) -> IngestionResult:
-        """Collect, normalize [0,1], then publish to Redis + InfluxDB + stream."""
+        """Collect, normalize [0,1], then publish to Redis + InfluxDB + CSV stream.
+
+        Raw resource limits (cpu_limit, memory_limit) and current throttle ratio are
+        extracted from raw_df BEFORE normalisation and embedded directly into the
+        Redis Stream message.  This allows the prediction agent to call the
+        rule-based risk calculators without a second Prometheus round-trip.
+        """
         result = await self.collect(
             target_config=target_config, window_minutes=window_minutes
         )
+
+        # Keep a copy of the raw (pre-normalization) frame for fine-tuning
+        raw_df = result.raw_metrics.copy()
+
+        # --- Extract raw limits before normalization destroys them ---
+        raw_limits = _extract_raw_limits(raw_df)
+
         df = self._normalize_rolling_minmax(result.raw_metrics.copy())
 
         if df.empty:
@@ -159,6 +183,7 @@ class LogIngestionAgent:
                 df=df,
                 container=target_config.container_name,
                 node=result.metadata.get("node"),
+                raw_df=raw_df,          # <-- pass raw frame so fine-tuner can use it
             )
 
         await self.redis_store.write_stream_message(
@@ -168,6 +193,8 @@ class LogIngestionAgent:
                 "pod": target_config.pod_name,
                 "container": target_config.container_name or "",
                 "features_json": json.dumps(payload),
+                # Raw limits embedded here so prediction agent can run calculators
+                "raw_limits_json": json.dumps(raw_limits),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
@@ -192,6 +219,10 @@ class LogIngestionAgent:
 
             elapsed = (datetime.now(timezone.utc) - started).total_seconds()
             await asyncio.sleep(max(0.0, 60.0 - elapsed))
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     def _lookup_node_for_pod(self, pod: str, namespace: str) -> str | None:
         result = self.prometheus.query(
@@ -253,3 +284,37 @@ class LogIngestionAgent:
             df[col] = (df[col] - roll_min) / denom
             df[col] = df[col].clip(0.0, 1.0)
         return df
+
+
+# ---------------------------------------------------------------------------
+# Module-level helper (used by ingestion_agent and readable in tests)
+# ---------------------------------------------------------------------------
+
+# In src/agents/ingestion_agent.py, modify _extract_raw_limits:
+
+def _extract_raw_limits(raw_df: pd.DataFrame) -> dict:
+    """
+    Pull the last known raw (pre-normalization) values for resource limits
+    and current throttle ratio out of raw_df.
+    """
+    def _last(col: str, default: float = 0.0) -> float:
+        if col in raw_df.columns:
+            series = raw_df[col].dropna()
+            if not series.empty:
+                val = float(series.iloc[-1])
+                # Cap failcnt to reasonable values
+                if col == _MEM_FAIL_COL:
+                    if val > 1000 or np.isnan(val):
+                        return 0.0
+                    return min(val, 100.0)
+                if np.isnan(val):
+                    return default
+                return val
+        return default
+
+    return {
+        "cpu_limit": _last(_CPU_LIMIT_COL, 0.0),
+        "memory_limit": _last(_MEM_LIMIT_COL, 0.0),
+        "throttle_ratio": _last(_THROTTLE_RATIO_COL, 0.0),
+        "memory_failcnt": _last(_MEM_FAIL_COL, 0.0),
+    }

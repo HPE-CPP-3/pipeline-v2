@@ -179,6 +179,8 @@ class PrometheusClient:
         values = result[0].get("values", [])
         return [(datetime.fromtimestamp(ts), float(val)) for ts, val in values]
 
+    # In src/ingestion/prometheus_client.py, in get_container_cpu_usage_seconds_total:
+
     async def get_container_cpu_usage_seconds_total(
         self,
         namespace: str,
@@ -187,18 +189,48 @@ class PrometheusClient:
         window_minutes: int = 60,
     ) -> list[tuple[datetime, float]]:
         selector = self._selector(namespace, pod_name, container_name)
-        query = f'rate(container_cpu_usage_seconds_total{{{selector}, container!="", image!=""}}[5m])'
+        
+        # Try multiple query variations
+        queries_to_try = []
+        
+        # Query 1: With rate and container
+        if container_name:
+            queries_to_try.append(
+                f'rate(container_cpu_usage_seconds_total{{namespace="{namespace}", pod="{pod_name}", container="{container_name}"}}[5m])'
+            )
+        
+        # Query 2: With rate, no container filter
+        queries_to_try.append(
+            f'rate(container_cpu_usage_seconds_total{{namespace="{namespace}", pod="{pod_name}"}}[5m])'
+        )
+        
+        # Query 3: Without rate (raw counter)
+        queries_to_try.append(
+            f'container_cpu_usage_seconds_total{{namespace="{namespace}", pod="{pod_name}"}}'
+        )
+        
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
-        result = self.query_range(query, start, end, step=60)
-        if not result:
-            return []
-        values = result[0].get("values", [])
-        return [
-            (datetime.fromtimestamp(ts, tz=timezone.utc), float(val))
-            for ts, val in values
-        ]
-
+        
+        for i, query in enumerate(queries_to_try):
+            logger.debug(f"Trying query {i+1}: {query}")
+            result = self.query_range(query, start, end, step=60)
+            
+            if result:
+                logger.info(f"Query {i+1} succeeded with {len(result)} series")
+                values = result[0].get("values", [])
+                if values:
+                    logger.info(f"Got {len(values)} data points for CPU")
+                    return [
+                        (datetime.fromtimestamp(ts, tz=timezone.utc), float(val))
+                        for ts, val in values
+                    ]
+            else:
+                logger.warning(f"Query {i+1} returned no results")
+        
+        logger.error(f"All queries failed for CPU usage: {namespace}/{pod_name}")
+        return []
+    
     async def get_container_cpu_throttled_seconds_total(
         self,
         namespace: str,
@@ -693,18 +725,27 @@ class PrometheusClient:
         container_name: Optional[str] = None,
     ) -> dict[str, float]:
         selector = self._selector(namespace, pod_name, container_name)
+
+        # Requests
         cpu_req = self.query(
             f'kube_pod_container_resource_requests{{resource="cpu", {selector}}}'
         )
         mem_req = self.query(
             f'kube_pod_container_resource_requests{{resource="memory", {selector}}}'
         )
-        cpu_lim = self.query(
-            f'kube_pod_container_resource_limits{{resource="cpu", {selector}}}'
-        )
-        mem_lim = self.query(
-            f'kube_pod_container_resource_limits{{resource="memory", {selector}}}'
-        )
+        
+        # Limits with logging
+        cpu_query = f'kube_pod_container_resource_limits{{resource="cpu", {selector}}}'
+        logger.info(f"Executing CPU limit query: {cpu_query}")
+        cpu_lim = self.query(cpu_query)
+        logger.info(f"CPU limit result: {cpu_lim}")
+        
+        mem_query = f'kube_pod_container_resource_limits{{resource="memory", {selector}}}'
+        logger.info(f"Executing Memory limit query: {mem_query}")
+        mem_lim = self.query(mem_query)
+        logger.info(f"Memory limit result: {mem_lim}")
+        
+        # Pod status
         pod_phase = self.query(
             f'kube_pod_status_phase{{namespace="{namespace}", pod="{pod_name}"}}'
         )
@@ -730,30 +771,20 @@ class PrometheusClient:
         return {
             "kube_pod_container_resource_requests_cpu": float(
                 cpu_req[0].get("value", [0, 0])[1]
-            )
-            if cpu_req
-            else 0.0,
+            ) if cpu_req else 0.0,
             "kube_pod_container_resource_requests_memory": float(
                 mem_req[0].get("value", [0, 0])[1]
-            )
-            if mem_req
-            else 0.0,
+            ) if mem_req else 0.0,
             "kube_pod_container_resource_limits_cpu": float(
                 cpu_lim[0].get("value", [0, 0])[1]
-            )
-            if cpu_lim
-            else 0.0,
+            ) if cpu_lim else 0.0,
             "kube_pod_container_resource_limits_memory": float(
                 mem_lim[0].get("value", [0, 0])[1]
-            )
-            if mem_lim
-            else 0.0,
+            ) if mem_lim else 0.0,
             "kube_pod_status_phase": phase_value,
             "kube_pod_container_status_restarts_total": float(
                 restarts[0].get("value", [0, 0])[1]
-            )
-            if restarts
-            else 0.0,
+            ) if restarts else 0.0,
         }
 
     async def get_node_cpu_capacity_cores(self, node: str) -> float:
