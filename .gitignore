@@ -80,10 +80,17 @@ pypy-*/
 *.pkl
 *.h5
 *.pth
+*.pt
+data/csv/
+data/models/
 
 # Logs
 *.log
 logs/
+agent3_log.txt
+action_log.json
+decision_log.json
+agent4_ready_payload.json
 
 # OS
 .DS_Store
@@ -91,4 +98,5 @@ Thumbs.db
 
 # Secret manifests (never commit)
 *-secret.yaml
+
 
