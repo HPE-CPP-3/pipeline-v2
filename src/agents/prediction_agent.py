@@ -120,17 +120,54 @@ class WorkloadPredictionAgent:
 
     async def run_loop(self) -> None:
         """Wake up only when Stage 1 emits ingestion completion."""
+        # Start background task to listen for retraining requests from Agent 5
+        retrain_task = asyncio.create_task(self._listen_retrain_requests())
+        try:
+            last_id = "$"
+            while True:
+                messages = await self.redis_store.read_stream_messages(
+                    stream_name="stream:ingestion:complete",
+                    last_id=last_id,
+                    block_ms=5000,
+                    count=10,
+                )
+                for msg_id, msg in messages:
+                    last_id = msg_id
+                    await self._handle_ingestion_complete(msg)
+        finally:
+            retrain_task.cancel()
+
+    async def _listen_retrain_requests(self) -> None:
+        """Listen to stream:retrain:request and trigger incremental fine-tuning."""
         last_id = "$"
+        logger.info("[Prediction Agent] Listening for retraining requests on stream:retrain:request...")
         while True:
-            messages = await self.redis_store.read_stream_messages(
-                stream_name="stream:ingestion:complete",
-                last_id=last_id,
-                block_ms=5000,
-                count=10,
-            )
-            for msg_id, msg in messages:
-                last_id = msg_id
-                await self._handle_ingestion_complete(msg)
+            try:
+                messages = await self.redis_store.read_stream_messages(
+                    stream_name="stream:retrain:request",
+                    last_id=last_id,
+                    block_ms=5000,
+                    count=10,
+                )
+                for msg_id, msg in messages:
+                    last_id = msg_id
+                    namespace = msg.get("namespace", "test-workload")
+                    pod = msg.get("pod", "stress-test-app")
+                    reason = msg.get("reason", "Unknown trigger")
+                    logger.info(f"[Prediction Agent] Received retrain request for {namespace}/{pod}: {reason}")
+                    
+                    # Run in executor so we don't block the event loop during training
+                    await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        self._run_finetune,
+                        namespace,
+                        pod,
+                    )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.exception("Error in _listen_retrain_requests loop", exc_info=e)
+                await asyncio.sleep(5)
 
     # ------------------------------------------------------------------
     # Per-event handler
@@ -560,16 +597,21 @@ class WorkloadPredictionAgent:
         self, latest_df: pd.DataFrame, historical: pd.DataFrame
     ) -> float:
         h = historical.select_dtypes(include=[np.number])
-        l = latest_df.select_dtypes(include=[np.number])
-        if h.empty or l.empty:
+        if h.empty:
             return 0.5
 
-        cols = [c for c in l.columns if c in h.columns]
+        # To avoid scale mismatch (historical is raw metrics while latest_df is normalized [0,1]),
+        # we extract the latest raw metrics from the last row of the historical DataFrame
+        # since ingestion_agent appends the latest raw row to historical CSV before publishing.
+        l = h.tail(1)
+        cols = list(l.columns)
         if not cols:
             return 0.5
 
         zscores: list[float] = []
         for c in cols:
+            if c in ("namespace", "pod", "container", "node"):
+                continue
             mu = float(h[c].mean())
             sigma = float(h[c].std())
             x = float(l[c].iloc[-1])

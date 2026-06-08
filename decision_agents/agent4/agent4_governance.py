@@ -240,15 +240,8 @@ class RuleEngine:
 
 
 # ─────────────────────────────────────────────
-# LLM Reasoning (Gemini)
+# LLM Reasoning (Gemini, hosted OpenAI-compatible endpoint, or local llama.cpp)
 # ─────────────────────────────────────────────
-# To use a real LLM, replace the body of `reason()` with an API call.
-# Example for Gemini (already implemented below):
-#   import google.generativeai as genai
-#   genai.configure(api_key="YOUR_KEY")
-#   model = genai.GenerativeModel("gemini-1.5-flash")
-#   return model.generate_content(prompt).text
-
 from pydantic import BaseModel, Field, ValidationError
 
 class LLMResponseSchema(BaseModel):
@@ -262,26 +255,57 @@ class LLMReasoner:
     plain-English reasoning string plus whether to approve or reject.
     """
 
-    def __init__(self, api_key: str = None, model_type="local", local_model_path="models/governance_qwen_3b_q4_k_m.gguf"):
-        self.mode = model_type  # "gemini" or "local"
+    def __init__(
+        self,
+        api_key: str = None,
+        model_type="hosted",
+        local_model_path="models/governance_qwen_3b_q4_k_m.gguf",
+        gemini_model: str | None = None,
+        hosted_llm_url: str | None = None,
+        hosted_llm_model: str | None = None,
+        hosted_llm_api_key: str | None = None,
+    ):
+        self.mode = model_type  # "gemini", "hosted", or "local"
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.gemini_model = gemini_model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        self.hosted_llm_url = (
+            hosted_llm_url
+            or os.environ.get("HOSTED_LLM_URL")
+            or "https://elian-isochimal-kathaleen.ngrok-free.dev"
+        ).rstrip("/")
+        self.hosted_llm_model = hosted_llm_model or os.environ.get("HOSTED_LLM_MODEL", "gemma4:31b-cloud")
+        self.hosted_llm_api_key = hosted_llm_api_key or os.environ.get("HOSTED_LLM_API_KEY")
+        self.client = None
+        self.local_llm = None
         
-        if self.mode == "gemini" and self.api_key:
-            import google.generativeai as genai
-            from google.generativeai.types import HarmCategory, HarmBlockThreshold
+        if self.mode == "gemini":
+            if not self.api_key:
+                logger.warning("GEMINI_API_KEY is not set. Gemini mode will use mock LLM response.")
+                return
+
+            try:
+                import google.generativeai as genai
+            except ImportError:
+                logger.warning("google-generativeai not installed. Gemini mode will use mock LLM response.")
+                return
+
             genai.configure(api_key=self.api_key)
             self.client = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",  # fast and capable
+                model_name=self.gemini_model,
                 generation_config={
                     "temperature": 0.1,
                     "max_output_tokens": 200,
                     "response_mime_type": "application/json",
                 }
             )
-            self.local_llm = None
-            logger.info("Gemini client initialized successfully")
-        else:
-            self.client = None
+            logger.info(f"Gemini client initialized successfully with model={self.gemini_model}")
+        elif self.mode == "hosted":
+            self.hosted_chat_url = f"{self.hosted_llm_url}/v1/chat/completions"
+            logger.info(
+                f"Hosted LLM initialized with url={self.hosted_chat_url}, "
+                f"model={self.hosted_llm_model}"
+            )
+        elif self.mode == "local":
             try:
                 from llama_cpp import Llama
                 logger.info(f"Loading local LLM from {local_model_path}...")
@@ -298,6 +322,8 @@ class LLMReasoner:
             except ValueError as e:
                 logger.warning(f"Could not load local model: {e}. Falling back to mock.")
                 self.local_llm = None
+        else:
+            raise ValueError(f"Unknown LLM model_type: {self.mode}")
 
     def _build_prompt(self, payload: dict, flags: list[FlagReason]) -> str:
         """
@@ -329,6 +355,27 @@ STRICT OUTPUT RULES:
 
 Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas": int, "reasoning": "string"}}"""
 
+    def _parse_llm_json(self, res_text: str) -> LLMResponseSchema:
+        if "```json" in res_text:
+            res_text = res_text.split("```json")[1].split("```")[0]
+        elif "```" in res_text:
+            res_text = res_text.split("```")[1].split("```")[0]
+
+        return LLMResponseSchema(**json.loads(res_text.strip()))
+
+    def _validated_tuple(
+        self,
+        validated_data: LLMResponseSchema,
+        payload: dict,
+    ) -> tuple[str, bool, int]:
+        should_approve = validated_data.should_approve
+        final_replicas = validated_data.final_replicas
+
+        if not should_approve:
+            final_replicas = payload.get("current_replicas", 1)
+
+        return validated_data.reasoning, should_approve, final_replicas
+
     async def reason(
         self,
         payload: dict,
@@ -347,6 +394,7 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
 
         # 2. Call the Model – Gemini version
         if self.mode == "gemini" and self.client:
+            res_text = ""
             try:
                 # Gemini doesn't have native async, run in thread pool
                 def _sync_gemini_call():
@@ -355,22 +403,8 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
                 
                 res_text = await asyncio.get_event_loop().run_in_executor(None, _sync_gemini_call)
                 
-                # Gemini may wrap JSON in markdown
-                if "```json" in res_text:
-                    res_text = res_text.split("```json")[1].split("```")[0]
-                elif "```" in res_text:
-                    res_text = res_text.split("```")[1].split("```")[0]
-                
-                import json
-                data = json.loads(res_text.strip())
-                validated_data = LLMResponseSchema(**data)
-                should_approve = validated_data.should_approve
-                final_replicas = validated_data.final_replicas
-                
-                if not should_approve:
-                    final_replicas = payload.get("current_replicas", 1)  # Force safety hold
-                    
-                return validated_data.reasoning, should_approve, final_replicas
+                validated_data = self._parse_llm_json(res_text)
+                return self._validated_tuple(validated_data, payload)
                 
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse Gemini JSON: {res_text[:200]}, error: {e}")
@@ -382,7 +416,57 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
                 logger.error(f"Gemini API Error: {e}")
                 return "LLM unreachable, defaulting to safe hold.", False, payload.get('current_replicas', 1)
 
-        # 3. Local LLM (llama.cpp) fallback
+        # 3. Hosted OpenAI-compatible LLM
+        elif self.mode == "hosted":
+            res_text = ""
+            try:
+                import httpx
+
+                headers = {"Content-Type": "application/json"}
+                if self.hosted_llm_api_key:
+                    headers["Authorization"] = f"Bearer {self.hosted_llm_api_key}"
+
+                request_payload = {
+                    "model": self.hosted_llm_model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a Kubernetes autoscaling governance agent. "
+                                "Always respond with a JSON object containing: "
+                                "should_approve (boolean), final_replicas (integer), reasoning (string)."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 200,
+                }
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        self.hosted_chat_url,
+                        headers=headers,
+                        json=request_payload,
+                    )
+                    response.raise_for_status()
+
+                data = response.json()
+                res_text = data["choices"][0]["message"]["content"]
+                validated_data = self._parse_llm_json(res_text)
+                return self._validated_tuple(validated_data, payload)
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse hosted LLM JSON: {res_text[:200]}, error: {e}")
+                return f"Failed to parse hosted LLM JSON: {res_text[:100]}", False, payload.get('current_replicas', 1)
+            except (KeyError, IndexError, ValidationError) as e:
+                logger.error(f"Hosted LLM output failed schema validation: {e}")
+                return "Hosted LLM returned malformed data.", False, payload.get('current_replicas', 1)
+            except Exception as e:
+                logger.error(f"Hosted LLM API Error: {e}")
+                return "Hosted LLM unreachable, defaulting to safe hold.", False, payload.get('current_replicas', 1)
+
+        # 4. Local LLM (llama.cpp) fallback
         elif self.local_llm:
             try:
                 logger.info("Running local LLM inference...")
@@ -396,17 +480,9 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
                     temperature=0.1
                 )
                 res_text = response["choices"][0]["message"]["content"]
-                import json
                 try:
-                    data = json.loads(res_text)
-                    validated_data = LLMResponseSchema(**data)
-                    should_approve = validated_data.should_approve
-                    final_replicas = validated_data.final_replicas
-                    
-                    if not should_approve:
-                        final_replicas = payload.get("current_replicas", 1) # Force safety hold
-                        
-                    return validated_data.reasoning, should_approve, final_replicas
+                    validated_data = self._parse_llm_json(res_text)
+                    return self._validated_tuple(validated_data, payload)
                 except json.JSONDecodeError:
                     return f"Failed to parse LLM JSON: {res_text}", False, payload.get('current_replicas', 1)
                 except ValidationError as e:
@@ -416,9 +492,9 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
                 logger.error(f"Local LLM Error: {e}")
                 return "Local LLM failed, defaulting to safe hold.", False, payload.get('current_replicas', 1)
         
-        # 4. Mock fallback (no API key, no local model)
+        # 5. Mock fallback (no configured client)
         else:
-            logger.warning("No GEMINI_API_KEY and no local model loaded, using mock LLM response.")
+            logger.warning("LLM client unavailable, using mock LLM response.")
             return self._mock_llm_response(payload, flags)
 
     def _mock_llm_response(
@@ -503,10 +579,24 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
 
 class GovernanceAgent:
 
-    def __init__(self, gemini_api_key: str = None):
+    def __init__(
+        self,
+        llm_provider: str = "gemini",
+        gemini_api_key: str = None,
+        gemini_model: str | None = None,
+        hosted_llm_url: str | None = None,
+        hosted_llm_model: str | None = None,
+        hosted_llm_api_key: str | None = None,
+    ):
         self.rule_engine  = RuleEngine(GovernanceConfig())
-        model_type = "gemini" if gemini_api_key else "local"
-        self.llm_reasoner = LLMReasoner(api_key=gemini_api_key, model_type=model_type)
+        self.llm_reasoner = LLMReasoner(
+            api_key=gemini_api_key,
+            model_type=llm_provider,
+            gemini_model=gemini_model,
+            hosted_llm_url=hosted_llm_url,
+            hosted_llm_model=hosted_llm_model,
+            hosted_llm_api_key=hosted_llm_api_key,
+        )
 
     async def run(self, payload: dict) -> GovernanceDecision:
         logger.info("=" * 60)
@@ -670,7 +760,14 @@ async def run_redis_mode(args):
 
     logger.info(f"Connecting to Redis at {args.redis_host}:{args.redis_port}...")
     redis_store = RedisStore(host=args.redis_host, port=args.redis_port)
-    agent = GovernanceAgent(gemini_api_key=args.gemini_key)
+    agent = GovernanceAgent(
+        llm_provider=args.llm_provider,
+        gemini_api_key=args.gemini_key,
+        gemini_model=args.gemini_model,
+        hosted_llm_url=args.hosted_llm_url,
+        hosted_llm_model=args.hosted_llm_model,
+        hosted_llm_api_key=args.hosted_llm_api_key,
+    )
 
     logger.info("Agent 4: Listening on stream:optimization:complete...")
     last_id = "$"  # Read only new messages
@@ -754,7 +851,7 @@ async def run_redis_mode(args):
                 gov_dict["flags"] = json.dumps(gov_dict["flags"])  # list → JSON string
                 gov_dict["outcome"] = str(gov_dict["outcome"])
                 # Copy pod identity fields from incoming payload for traceability
-                for field in ("namespace", "pod", "container"):
+                for field in ("namespace", "pod", "container", "recommended_action"):
                     if field in payload:
                         gov_dict[field] = payload[field]
 
@@ -788,7 +885,14 @@ async def async_main(args):
             payload = json.load(f)
 
         # Run governance
-        agent    = GovernanceAgent(gemini_api_key=args.gemini_key)
+        agent = GovernanceAgent(
+            llm_provider=args.llm_provider,
+            gemini_api_key=args.gemini_key,
+            gemini_model=args.gemini_model,
+            hosted_llm_url=args.hosted_llm_url,
+            hosted_llm_model=args.hosted_llm_model,
+            hosted_llm_api_key=args.hosted_llm_api_key,
+        )
         decision = await agent.run(payload)
 
         # Print to terminal
@@ -853,10 +957,44 @@ def main():
         help="Redis port",
     )
     parser.add_argument(
+        "--llm-provider",
+        type=str,
+        choices=["gemini", "hosted", "local"],
+        default=os.environ.get("AGENT4_LLM_PROVIDER", "gemini"),
+        help="LLM backend: gemini, hosted, or local (default: $AGENT4_LLM_PROVIDER or gemini)",
+    )
+    parser.add_argument(
         "--gemini-key",  # Changed from --groq-key
         type=str,
         default=os.environ.get("GEMINI_API_KEY"),
         help="Google Gemini API Key (default: $GEMINI_API_KEY)",
+    )
+    parser.add_argument(
+        "--gemini-model",
+        type=str,
+        default=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
+        help="Gemini model name (default: $GEMINI_MODEL or gemini-2.0-flash)",
+    )
+    parser.add_argument(
+        "--hosted-llm-url",
+        type=str,
+        default=os.environ.get(
+            "HOSTED_LLM_URL",
+            "https://elian-isochimal-kathaleen.ngrok-free.dev",
+        ),
+        help="Hosted OpenAI-compatible LLM base URL (default: $HOSTED_LLM_URL or your ngrok URL)",
+    )
+    parser.add_argument(
+        "--hosted-llm-model",
+        type=str,
+        default=os.environ.get("HOSTED_LLM_MODEL", "gemma4:31b-cloud"),
+        help="Hosted LLM model name (default: $HOSTED_LLM_MODEL or gemma4:31b-cloud)",
+    )
+    parser.add_argument(
+        "--hosted-llm-api-key",
+        type=str,
+        default=os.environ.get("HOSTED_LLM_API_KEY"),
+        help="Optional bearer token for hosted LLM (default: $HOSTED_LLM_API_KEY)",
     )
     args = parser.parse_args()
 

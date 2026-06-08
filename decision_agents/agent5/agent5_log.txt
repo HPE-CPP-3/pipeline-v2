@@ -1,0 +1,59 @@
+16:36:48 [INFO] Agent 5 lock acquired.
+16:36:48 [INFO] Loaded drift configuration from /home/vulcan/Abhay/Projects/HPE/pipeline-v2/configs/training.yaml
+16:36:48 [INFO] Initialized RedisStore at localhost:6380
+16:36:48 [INFO] [K8s] Local kubeconfig loaded.
+16:36:48 [INFO] Initialized EMADriftDetector: alpha=0.1, z_threshold=3.0, feature_ratio=0.2
+16:36:48 [INFO] Agent 5: Listening on stream:governance:complete...
+16:36:48 [INFO] Agent 5: Listening on stream:ingestion:complete for drift detection...
+16:36:49 [INFO] --- Received Governance Decision 1780916809589-0 ---
+16:36:49 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=False) | action= | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:36:49 [INFO] Governance decision rejected or hold. No scaling action executed.
+16:37:55 [INFO] Agent 5 lock acquired.
+16:37:55 [INFO] Loaded drift configuration from /home/vulcan/Abhay/Projects/HPE/pipeline-v2/configs/training.yaml
+16:37:55 [INFO] Initialized RedisStore at localhost:6380
+16:37:55 [INFO] [K8s] Local kubeconfig loaded.
+16:37:55 [INFO] Initialized EMADriftDetector: alpha=0.1, z_threshold=3.0, feature_ratio=0.2
+16:37:55 [INFO] Agent 5: Listening on stream:governance:complete...
+16:37:55 [INFO] Agent 5: Listening on stream:ingestion:complete for drift detection...
+16:37:56 [INFO] --- Received Governance Decision 1780916876150-0 ---
+16:37:56 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:38:50 [INFO] Agent 5 lock acquired.
+16:38:50 [INFO] Loaded drift configuration from /home/vulcan/Abhay/Projects/HPE/pipeline-v2/configs/training.yaml
+16:38:50 [INFO] Initialized RedisStore at localhost:6380
+16:38:50 [INFO] [K8s] Local kubeconfig loaded.
+16:38:50 [INFO] Initialized EMADriftDetector: alpha=0.1, z_threshold=3.0, feature_ratio=0.2
+16:38:50 [INFO] Agent 5: Listening on stream:governance:complete...
+16:38:50 [INFO] Agent 5: Listening on stream:ingestion:complete for drift detection...
+16:38:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 0.0%
+16:38:51 [INFO] --- Received Governance Decision 1780916931541-0 ---
+16:38:51 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:39:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 57.9%
+16:39:51 [INFO] Drift trigger #1: 11/19 features drifting (57.9%)
+16:39:51 [WARNING] [Drift] Feature drift detected for test-workload/stress-test-app-7758b96bd8-m86mg (ratio=57.9%). Publishing retraining request.
+16:39:51 [INFO] --- Received Governance Decision 1780916991450-0 ---
+16:39:51 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:40:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 0.0%
+16:40:51 [INFO] --- Received Governance Decision 1780917051447-0 ---
+16:40:51 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:41:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 5.3%
+16:41:51 [INFO] --- Received Governance Decision 1780917111409-0 ---
+16:41:51 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:42:00 [INFO] --- Received Governance Decision 1780917120897-0 ---
+16:42:00 [INFO] Decision details: outcome=GovernanceOutcome.ESCALATED_TO_LLM (approved=True) | action=scale_up | replicas=3 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:42:00 [INFO] [K8s] Resolved pod stress-test-app-7758b96bd8-m86mg to Deployment stress-test-app
+16:42:00 [INFO] [K8s] Successfully scaled deployment test-workload/stress-test-app to 3 replicas.
+16:42:10 [INFO] --- Received Governance Decision 1780917130515-0 ---
+16:42:10 [INFO] Decision details: outcome=GovernanceOutcome.REJECTED (approved=False) | action=scale_down | replicas=3 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:42:10 [INFO] Governance decision rejected or hold. No scaling action executed.
+16:42:22 [INFO] --- Received Governance Decision 1780917142223-0 ---
+16:42:22 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=scale_down | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:42:22 [INFO] [K8s] Resolved pod stress-test-app-7758b96bd8-m86mg to Deployment stress-test-app
+16:42:22 [INFO] [K8s] Successfully scaled deployment test-workload/stress-test-app to 1 replicas.
+16:42:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 15.8%
+16:42:51 [INFO] --- Received Governance Decision 1780917171438-0 ---
+16:42:51 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-m86mg
+16:43:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 0.0%
+16:58:27 [INFO] [Drift] Updated features for test-workload/stress-test-app-7c8cd47c47-stwwk. Current drift ratio: 15.4%
+16:58:59 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-5dwxj. Current drift ratio: 10.5%
+16:58:59 [INFO] --- Received Governance Decision 1780918139481-0 ---
+16:58:59 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-5dwxj
