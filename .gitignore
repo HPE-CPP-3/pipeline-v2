@@ -80,6 +80,8 @@ pypy-*/
 *.pkl
 *.h5
 *.pth
+*.pt
+*.gguf
 
 # Logs
 *.log
@@ -91,6 +93,10 @@ decision_agents/**/agent4_log.txt
 decision_agents/**/action_log.json
 decision_agents/**/agent4_ready_payload.json
 decision_agents/**/decision_log.json
+
+# Generated output data
+data/csv/metrics/*.csv
+data/csv/predictions/*.csv
 
 # OS
 .DS_Store
