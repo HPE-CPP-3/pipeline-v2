@@ -240,16 +240,10 @@ class RuleEngine:
 
 
 # ─────────────────────────────────────────────
-# LLM Reasoning (Mocked)
+# LLM Reasoning (Gemini)
 # ─────────────────────────────────────────────
 # To use a real LLM, replace the body of `reason()` with an API call.
-# Example for OpenAI:
-#   import openai
-#   client = openai.OpenAI(api_key="sk-...")
-#   resp = client.chat.completions.create(model="gpt-4o", messages=[...])
-#   return resp.choices[0].message.content
-#
-# Example for Gemini:
+# Example for Gemini (already implemented below):
 #   import google.generativeai as genai
 #   genai.configure(api_key="YOUR_KEY")
 #   model = genai.GenerativeModel("gemini-1.5-flash")
@@ -266,17 +260,26 @@ class LLMReasoner:
     """
     Receives the full context (payload + flags) and returns a
     plain-English reasoning string plus whether to approve or reject.
-    Currently MOCKED — replace reason() with a real API call.
     """
 
     def __init__(self, api_key: str = None, model_type="local", local_model_path="models/governance_qwen_3b_q4_k_m.gguf"):
-        self.mode = model_type # "local" or "groq"
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+        self.mode = model_type  # "gemini" or "local"
+        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
         
-        if self.mode == "groq" and self.api_key:
-            from groq import AsyncGroq
-            self.client = AsyncGroq(api_key=self.api_key)
+        if self.mode == "gemini" and self.api_key:
+            import google.generativeai as genai
+            from google.generativeai.types import HarmCategory, HarmBlockThreshold
+            genai.configure(api_key=self.api_key)
+            self.client = genai.GenerativeModel(
+                model_name="gemini-1.5-flash",  # fast and capable
+                generation_config={
+                    "temperature": 0.1,
+                    "max_output_tokens": 200,
+                    "response_mime_type": "application/json",
+                }
+            )
             self.local_llm = None
+            logger.info("Gemini client initialized successfully")
         else:
             self.client = None
             try:
@@ -342,36 +345,44 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
         prompt = self._build_prompt(payload, flags)
         logger.debug("LLM Prompt:\n" + prompt)
 
-        # 2. Call the Model
-        if self.mode == "groq" and self.client:
+        # 2. Call the Model – Gemini version
+        if self.mode == "gemini" and self.client:
             try:
-                response = await self.client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.3-70b-versatile",
-                    response_format={"type": "json_object"},
-                    max_tokens=200,
-                    timeout=10.0
-                )
-                res_text = response.choices[0].message.content
+                # Gemini doesn't have native async, run in thread pool
+                def _sync_gemini_call():
+                    response = self.client.generate_content(prompt)
+                    return response.text
+                
+                res_text = await asyncio.get_event_loop().run_in_executor(None, _sync_gemini_call)
+                
+                # Gemini may wrap JSON in markdown
+                if "```json" in res_text:
+                    res_text = res_text.split("```json")[1].split("```")[0]
+                elif "```" in res_text:
+                    res_text = res_text.split("```")[1].split("```")[0]
+                
                 import json
-                try:
-                    data = json.loads(res_text)
-                    validated_data = LLMResponseSchema(**data)
-                    should_approve = validated_data.should_approve
-                    final_replicas = validated_data.final_replicas
+                data = json.loads(res_text.strip())
+                validated_data = LLMResponseSchema(**data)
+                should_approve = validated_data.should_approve
+                final_replicas = validated_data.final_replicas
+                
+                if not should_approve:
+                    final_replicas = payload.get("current_replicas", 1)  # Force safety hold
                     
-                    if not should_approve:
-                        final_replicas = payload.get("current_replicas", 1) # Force safety hold
-                        
-                    return validated_data.reasoning, should_approve, final_replicas
-                except json.JSONDecodeError:
-                    return f"Failed to parse LLM JSON: {res_text}", False, payload.get('current_replicas', 1)
-                except ValidationError as e:
-                    logger.error(f"LLM output failed schema validation: {e}")
-                    return "LLM returned malformed data.", False, payload.get('current_replicas', 1)
+                return validated_data.reasoning, should_approve, final_replicas
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse Gemini JSON: {res_text[:200]}, error: {e}")
+                return f"Failed to parse LLM JSON: {res_text[:100]}", False, payload.get('current_replicas', 1)
+            except ValidationError as e:
+                logger.error(f"Gemini output failed schema validation: {e}")
+                return "LLM returned malformed data.", False, payload.get('current_replicas', 1)
             except Exception as e:
-                logger.error(f"Groq API Error: {e}")
+                logger.error(f"Gemini API Error: {e}")
                 return "LLM unreachable, defaulting to safe hold.", False, payload.get('current_replicas', 1)
+
+        # 3. Local LLM (llama.cpp) fallback
         elif self.local_llm:
             try:
                 logger.info("Running local LLM inference...")
@@ -404,9 +415,11 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
             except Exception as e:
                 logger.error(f"Local LLM Error: {e}")
                 return "Local LLM failed, defaulting to safe hold.", False, payload.get('current_replicas', 1)
+        
+        # 4. Mock fallback (no API key, no local model)
         else:
-             logger.warning("No GROQ_API_KEY and no local model loaded, using mock LLM response.")
-             return self._mock_llm_response(payload, flags)
+            logger.warning("No GEMINI_API_KEY and no local model loaded, using mock LLM response.")
+            return self._mock_llm_response(payload, flags)
 
     def _mock_llm_response(
         self,
@@ -490,10 +503,10 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
 
 class GovernanceAgent:
 
-    def __init__(self, groq_api_key: str = None):
+    def __init__(self, gemini_api_key: str = None):
         self.rule_engine  = RuleEngine(GovernanceConfig())
-        model_type = "groq" if groq_api_key else "local"
-        self.llm_reasoner = LLMReasoner(api_key=groq_api_key, model_type=model_type)
+        model_type = "gemini" if gemini_api_key else "local"
+        self.llm_reasoner = LLMReasoner(api_key=gemini_api_key, model_type=model_type)
 
     async def run(self, payload: dict) -> GovernanceDecision:
         logger.info("=" * 60)
@@ -657,7 +670,7 @@ async def run_redis_mode(args):
 
     logger.info(f"Connecting to Redis at {args.redis_host}:{args.redis_port}...")
     redis_store = RedisStore(host=args.redis_host, port=args.redis_port)
-    agent = GovernanceAgent(groq_api_key=args.groq_key)
+    agent = GovernanceAgent(gemini_api_key=args.gemini_key)
 
     logger.info("Agent 4: Listening on stream:optimization:complete...")
     last_id = "$"  # Read only new messages
@@ -775,7 +788,7 @@ async def async_main(args):
             payload = json.load(f)
 
         # Run governance
-        agent    = GovernanceAgent(groq_api_key=args.groq_key)
+        agent    = GovernanceAgent(gemini_api_key=args.gemini_key)
         decision = await agent.run(payload)
 
         # Print to terminal
@@ -840,10 +853,10 @@ def main():
         help="Redis port",
     )
     parser.add_argument(
-        "--groq-key",
+        "--gemini-key",  # Changed from --groq-key
         type=str,
-        default=os.environ.get("GROQ_API_KEY"),
-        help="Groq API Key (default: $GROQ_API_KEY)",
+        default=os.environ.get("GEMINI_API_KEY"),
+        help="Google Gemini API Key (default: $GEMINI_API_KEY)",
     )
     args = parser.parse_args()
 

@@ -33,7 +33,7 @@ NAMESPACE="${NAMESPACE:-${PIPELINE_NAMESPACE:-}}"
 POD="${POD:-${PIPELINE_POD:-}}"
 CONTAINER="${CONTAINER:-${PIPELINE_CONTAINER:-}}"
 
-GROQ_KEY="${GROQ_API_KEY:-}"
+GEMINI_KEY="${GEMINI_API_KEY:-}"
 
 usage() {
   cat <<EOF
@@ -198,13 +198,13 @@ start_bg "Agent3" "$PYTHON_BIN" "$ROOT/decision_agents/agent3/agent3_optimizatio
   --log-file "$ROOT/decision_agents/agent3/agent3_log.txt"
 
 # Agent 4
-if [[ -n "$GROQ_KEY" ]]; then
+if [[ -n "$GEMINI_KEY" ]]; then
   start_bg "Agent4" "$PYTHON_BIN" "$ROOT/decision_agents/agent4/agent4_governance.py" \
     --mode redis \
     --redis-host "$REDIS_HOST" \
     --redis-port "$REDIS_PORT" \
     --log-file "$ROOT/decision_agents/agent4/agent4_log.txt" \
-    --groq-key "$GROQ_KEY"
+    --gemini-key "$GEMINI_KEY"
 else
   start_bg "Agent4" "$PYTHON_BIN" "$ROOT/decision_agents/agent4/agent4_governance.py" \
     --mode redis \

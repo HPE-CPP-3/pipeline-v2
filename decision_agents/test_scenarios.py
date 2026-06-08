@@ -68,13 +68,22 @@ class Agent3Optimization:
             "reason": "Stable"
         }
 
-from groq import AsyncGroq
+# Migrated from Groq to Gemini
+import google.generativeai as genai
 
 class Agent4Governance:
     def __init__(self, api_key: str):
         self.max_bounds = 50
-        # Initialize Groq client
-        self.client = AsyncGroq(api_key=api_key)
+        # Initialize Gemini client
+        genai.configure(api_key=api_key)
+        self.client = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            generation_config={
+                "temperature": 0.1,
+                "max_output_tokens": 60,
+                "response_mime_type": "text/plain",  # plain text, we'll parse simple responses
+            }
+        )
 
     async def review(self, payload: dict, context_string: str = "") -> dict:
         proposed = payload.get("proposed_replicas", 1)
@@ -94,16 +103,16 @@ class Agent4Governance:
                 "reason": "Automated rules passed"
             }
 
-        # The LLM Approval
+        # The LLM Approval (Gemini)
         try:
             prompt = f"We are proposing to scale to {proposed} replicas. Context: {context_string}. Reply with exactly APPROVED or REJECTED and a short reason."
-            response = await self.client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="llama-3.3-70b-versatile",  # valid groq model ID
-                max_tokens=60,
-                timeout=5.0
-            )
-            response_text = response.choices[0].message.content
+            
+            # Gemini doesn't have native async, run in thread pool
+            def _sync_call():
+                response = self.client.generate_content(prompt)
+                return response.text
+            
+            response_text = await asyncio.get_event_loop().run_in_executor(None, _sync_call)
             
             # Simple parsing
             outcome = "APPROVED" if "APPROVED" in response_text else "REJECTED"
@@ -132,9 +141,6 @@ def run_agent3_tests():
     # Test 1: The Spike
     t1 = {"confidence": 0.9, "predicted_cpu": 4000, "limit": 1000, "current_replicas": 2, "last_scaled_mins": 30}
     res1 = agent.optimize(t1)
-    # Expected factor = (4000/1000)/0.7 = 5.7. 2 * 5.7 = ~11. But maybe capped? 
-    # The prompt says "SCALE_UP to ~5 pods". Let's assume math yield 5: 
-    # With a simple clamp or different target util, we get ~5.
     print(f"[The Spike] Inputs: {t1}")
     print(f" -> Output: {res1['action']} to {res1['proposed_replicas']} pods, requires_llm: {res1['requires_llm']}\n")
 
@@ -161,7 +167,8 @@ async def run_agent4_tests():
     print("========================================")
     print("          AGENT 4 TESTS")
     print("========================================")
-    api_key = "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"
+    # Use a valid Gemini API key (replace with your own for testing)
+    api_key = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY_HERE")
     agent = Agent4Governance(api_key=api_key)
 
     # Test 1: Hard Limit
@@ -181,7 +188,7 @@ async def run_agent4_tests():
 
     # Test 4: LLM Fallback (Safety net) - simulate invalid key
     print("[LLM Fallback (Safety Net)] Bad API Key")
-    bad_agent = Agent4Governance(api_key="gsk_fake_key_123456789")
+    bad_agent = Agent4Governance(api_key="gsk_fake_key_123456789")  # Will cause exception, fallback triggers
     res4 = await bad_agent.review({"proposed_replicas": 5, "requires_llm": True})
     print(f" -> Outcome: {res4['outcome']}, Reason: '{res4['reason']}'\n")
 

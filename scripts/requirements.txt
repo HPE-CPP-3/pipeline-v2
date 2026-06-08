@@ -41,4 +41,4 @@ kubernetes>=29.0.0
 
 # LLM (Agent 4 Governance)
 llama-cpp-python>=0.2.0
-groq>=0.4.0
+google-generativeai>=0.8.0
