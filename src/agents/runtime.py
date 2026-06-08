@@ -16,6 +16,7 @@ from ..storage.csv_store import CSVStore
 from ..storage.influxdb_store import InfluxDBStore
 from ..storage.redis_store import RedisStore
 from .ingestion_agent import LogIngestionAgent
+from .redis_ingestion_bridge import RedisIngestionBridge, RedisIngestionBridgeConfig
 from .pipeline import TwoStagePipeline
 from .prediction_agent import WorkloadPredictionAgent
 from .schemas import TargetConfig
@@ -267,8 +268,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run decoupled ingestion + prediction agents"
     )
-    parser.add_argument("--namespace", required=True)
-    parser.add_argument("--pod", required=True)
+    parser.add_argument("--namespace", default=os.getenv("PIPELINE_NAMESPACE", ""))
+    parser.add_argument("--pod", default=os.getenv("PIPELINE_POD", ""))
     parser.add_argument("--container", default=None)
     parser.add_argument(
         "--prometheus-url",
@@ -279,9 +280,50 @@ def main() -> None:
     )
     parser.add_argument(
         "--agent",
-        choices=["both", "ingestion", "prediction"],
+        choices=["both", "ingestion", "prediction", "redis-ingestion"],
         default="both",
         help="Run both agents, only ingestion, or only prediction",
+    )
+
+    # Redis-ingestion bridge (Prometheus-free Stage 1)
+    parser.add_argument(
+        "--redis-input-mode",
+        choices=["stream", "keys"],
+        default=os.getenv("PIPELINE_REDIS_INPUT_MODE", "stream"),
+        help="Redis ingestion source: 'stream' (default) or 'keys'",
+    )
+    parser.add_argument(
+        "--redis-input-stream",
+        default=os.getenv("PIPELINE_REDIS_INPUT_STREAM", "stream:metrics:latest"),
+        help="(stream mode) Stream to read raw metrics from",
+    )
+    parser.add_argument(
+        "--redis-output-stream",
+        default=os.getenv("PIPELINE_REDIS_OUTPUT_STREAM", "stream:ingestion:complete"),
+        help="Stream to write ingestion-complete events to",
+    )
+    parser.add_argument(
+        "--redis-start-id",
+        default=os.getenv("PIPELINE_REDIS_START_ID", "$"),
+        help="(stream mode) Redis Stream ID to start from ('$' = new only, '0' = from beginning)",
+    )
+    parser.add_argument(
+        "--redis-poll-seconds",
+        type=int,
+        default=int(os.getenv("PIPELINE_REDIS_POLL_SECONDS", "60")),
+        help="(keys mode) Poll interval in seconds",
+    )
+    parser.add_argument(
+        "--cpu-limit",
+        type=float,
+        default=float(os.getenv("PIPELINE_CPU_LIMIT", "0")),
+        help="Optional CPU limit (cores) to embed when not provided by source",
+    )
+    parser.add_argument(
+        "--memory-limit",
+        type=float,
+        default=float(os.getenv("PIPELINE_MEMORY_LIMIT", "0")),
+        help="Optional memory limit (bytes) to embed when not provided by source",
     )
 
     # Fine-tune knobs
@@ -312,9 +354,14 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Namespace/pod are required only for Prometheus ingestion / full pipeline.
+    if args.agent in {"both", "ingestion"}:
+        if not args.namespace or not args.pod:
+            parser.error("--namespace and --pod are required for agent=both/ingestion")
+
     target_config = TargetConfig(
-        namespace=args.namespace,
-        pod_name=args.pod,
+        namespace=args.namespace or "dummy",
+        pod_name=args.pod or "dummy",
         container_name=args.container,
     )
 
@@ -325,7 +372,22 @@ def main() -> None:
         max_retrains_per_day=args.finetune_max_per_day,
     )
 
-    if args.agent == "ingestion":
+    if args.agent == "redis-ingestion":
+        bridge_cfg = RedisIngestionBridgeConfig(
+            input_mode=args.redis_input_mode,
+            input_stream=args.redis_input_stream,
+            output_stream=args.redis_output_stream,
+            start_id=args.redis_start_id,
+            poll_seconds=args.redis_poll_seconds,
+            filter_namespace=args.namespace or None,
+            filter_pod=args.pod or None,
+            filter_container=args.container or None,
+            default_cpu_limit=args.cpu_limit,
+            default_memory_limit=args.memory_limit,
+        )
+        bridge = RedisIngestionBridge(redis_store=_build_redis_store(), config=bridge_cfg)
+        asyncio.run(bridge.run())
+    elif args.agent == "ingestion":
         asyncio.run(
             run_ingestion_only(
                 target_config=target_config,

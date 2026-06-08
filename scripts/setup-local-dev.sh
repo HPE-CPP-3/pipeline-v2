@@ -28,11 +28,20 @@ echo -e "${GREEN}✓ Docker Compose is available${NC}"
 echo ""
 echo -e "${YELLOW}Step 2: Starting local infrastructure (Redis + InfluxDB)...${NC}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+COMPOSE_FILE="$SCRIPT_DIR/docker-compose.dev.yaml"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo -e "${RED}✗ docker-compose file not found at: ${COMPOSE_FILE}${NC}"
+    exit 1
+fi
+
 # Start docker-compose
 if command -v docker-compose &> /dev/null; then
-    docker-compose -f docker-compose.dev.yaml up -d
+    docker-compose -f "$COMPOSE_FILE" up -d
 else
-    docker compose -f docker-compose.dev.yaml up -d
+    docker compose -f "$COMPOSE_FILE" up -d
 fi
 
 echo -e "${GREEN}✓ Services started${NC}"
@@ -80,9 +89,34 @@ echo -e "${GREEN}✓ InfluxDB configured${NC}"
 
 echo ""
 
-# Activate and install
+echo -e "${YELLOW}Step 5: Setting up Python venv + installing dependencies...${NC}"
+
+cd "$ROOT_DIR"
+
+if [ ! -d ".venv" ]; then
+    python3 -m venv .venv
+    echo -e "${GREEN}✓ Created venv at .venv${NC}"
+fi
+
+# shellcheck disable=SC1091
 source .venv/bin/activate
 
+python -m pip install --upgrade pip
+
+if [ -f "scripts/requirements.txt" ]; then
+    pip install -r scripts/requirements.txt
+fi
+
+pip install -e .
+
+# macOS fix: Python skips hidden .pth files, which breaks editable installs.
+# Some environments end up with __editable__*.pth marked as hidden.
+if [ "$(uname -s)" = "Darwin" ] && command -v chflags &> /dev/null; then
+    for pth in .venv/lib/python*/site-packages/__editable__*.pth; do
+        [ -f "$pth" ] || continue
+        chflags nohidden "$pth" 2>/dev/null || true
+    done
+fi
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 
@@ -111,5 +145,5 @@ echo "  3. Test the pipeline:"
 echo "     pipeline-agentic --pod <pod-name> --namespace <namespace>"
 echo ""
 echo -e "${YELLOW}To stop services:${NC}"
-echo "  docker-compose -f docker-compose.dev.yaml down"
+echo "  docker-compose -f scripts/docker-compose.dev.yaml down"
 echo ""
