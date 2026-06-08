@@ -69,6 +69,7 @@ class CSVStore:
 
         filepath = self.metrics_dir / f"{namespace}__{pod}.csv"
         header = not filepath.exists()
+        out = self._align_df_columns(out, filepath)
         out.to_csv(
             filepath, mode="a", header=header, index=True, index_label="timestamp"
         )
@@ -84,6 +85,7 @@ class CSVStore:
 
             raw_filepath = self.metrics_dir / f"{namespace}__{pod}__raw.csv"
             raw_header = not raw_filepath.exists()
+            raw_out = self._align_df_columns(raw_out, raw_filepath)
             raw_out.to_csv(
                 raw_filepath,
                 mode="a",
@@ -93,6 +95,54 @@ class CSVStore:
             )
 
         return filepath
+
+    def _align_df_columns(self, df_to_write: pd.DataFrame, file_path: Path) -> pd.DataFrame:
+        """Align DataFrame columns to match either the existing CSV file or a standard schema."""
+        if file_path.exists():
+            try:
+                with open(file_path, "r") as f:
+                    header_line = f.readline().strip()
+                if header_line:
+                    cols = header_line.split(",")
+                    if cols[0] == "timestamp":
+                        cols = cols[1:]
+                    # Reindex to match the file columns exactly
+                    return df_to_write.reindex(columns=cols, fill_value=0.0)
+            except Exception as e:
+                logger.warning(f"Failed to read header from {file_path}: {e}")
+
+        # Standard column order
+        standard_cols = [
+            "container_cpu_usage_seconds_total",
+            "container_cpu_cfs_throttled_seconds_total",
+            "container_memory_working_set_bytes",
+            "container_memory_failures_total",
+            "node_load1",
+            "node_load5",
+            "node_load15",
+            "node_memory_MemAvailable_bytes",
+            "node_disk_read_bytes_total",
+            "node_network_transmit_bytes_total",
+            "kube_pod_container_resource_requests_cpu",
+            "kube_pod_container_resource_requests_memory",
+            "kube_pod_container_resource_limits_cpu",
+            "kube_pod_container_resource_limits_memory",
+            "kube_pod_status_phase",
+            "kube_pod_container_status_restarts_total",
+            "derived_usage_vs_limit",
+            "derived_pressure_throttled_ratio",
+            "derived_cpu_volatility_5m",
+            "derived_cpu_volatility_10m",
+            "namespace",
+            "pod",
+            "container",
+            "node"
+        ]
+        extra_cols = [c for c in df_to_write.columns if c not in standard_cols]
+        target_cols = [c for c in standard_cols if c in df_to_write.columns] + extra_cols
+        if not target_cols:
+            return df_to_write
+        return df_to_write.reindex(columns=target_cols, fill_value=0.0)
 
     # ------------------------------------------------------------------
     # Predictions

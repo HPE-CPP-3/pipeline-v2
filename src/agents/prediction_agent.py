@@ -349,11 +349,17 @@ class WorkloadPredictionAgent:
             logger.debug(f"Raw CSV not found for inference: {csv_file}")
             return None
         try:
-            # Some historical CSVs were written with different schemas; skip malformed lines.
             df = pd.read_csv(csv_file, on_bad_lines="skip")
             if "timestamp" not in df.columns:
                 if "Unnamed: 0" in df.columns:
                     df = df.rename(columns={"Unnamed: 0": "timestamp"})
+            
+            # Coerce all columns except timestamp and metadata to numeric
+            metadata_cols = {"timestamp", "namespace", "pod", "container", "node"}
+            for col in df.columns:
+                if col not in metadata_cols:
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
             df = df.sort_values("timestamp").reset_index(drop=True)
             return df.tail(n_rows).reset_index(drop=True)
@@ -457,6 +463,13 @@ class WorkloadPredictionAgent:
                 df = df.reset_index()
             elif "timestamp" not in df.columns and "Unnamed: 0" in df.columns:
                 df = df.rename(columns={"Unnamed: 0": "timestamp"})
+            
+            # Coerce all columns except timestamp and metadata to numeric
+            metadata_cols = {"timestamp", "namespace", "pod", "container", "node"}
+            for col in df.columns:
+                if col not in metadata_cols:
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
             df = df.sort_values("timestamp").reset_index(drop=True)
             n = self._incremental_cfg.finetune_rows
@@ -567,7 +580,9 @@ class WorkloadPredictionAgent:
             logger.warning(f"Missing {len(missing)} features: {list(missing)[:10]}")
 
         # --- extract last 60 rows into full-width array ---
-        src = engineered[available_cols].tail(60).to_numpy(dtype=np.float32)
+        # Explicitly coerce to numeric, converting any accidental string/categorical values to NaN and then 0.0
+        engineered_numeric = engineered[available_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+        src = engineered_numeric.tail(60).to_numpy(dtype=np.float32)
         if src.shape[0] < 60:
             src = np.concatenate(
                 [np.zeros((60 - src.shape[0], len(available_cols)), dtype=np.float32), src],
