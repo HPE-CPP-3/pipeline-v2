@@ -184,11 +184,16 @@ class RedisStore:
         count: int = 10,
     ) -> list[tuple[str, dict[str, Any]]]:
         """Read new messages from a Redis Stream."""
-        messages = await self.client.xread(
-            {stream_name: last_id},
-            block=block_ms,
-            count=count,
-        )
+        import redis.exceptions
+        try:
+            messages = await self.client.xread(
+                {stream_name: last_id},
+                block=block_ms,
+                count=count,
+            )
+        except (redis.exceptions.TimeoutError, TimeoutError):
+            return []
+
         out: list[tuple[str, dict[str, Any]]] = []
         for _, items in messages:
             for msg_id, fields in items:

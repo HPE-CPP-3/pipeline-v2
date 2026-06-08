@@ -223,6 +223,9 @@ class WorkloadPredictionAgent:
             "namespace": namespace,
             "pod": pod,
             "container": container or "",
+            # Embed raw limits for downstream decision agents (ratios/guard-rails)
+            "cpu_limit": cpu_limit,
+            "memory_limit": memory_limit,
             "cpu_forecast": self._stringify_forecast(cpu_forecast),
             "memory_forecast": self._stringify_forecast(memory_forecast),
             "throttle_prob": round(throttle_prob, 4),

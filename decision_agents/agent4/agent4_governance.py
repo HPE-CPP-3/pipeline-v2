@@ -14,12 +14,11 @@ Architecture:
 auto-approve  LLM Reasoning (mocked - swap in real API key if needed)
    │          │
    └────┬─────┘
-   Final Decision (printed to terminal + saved to decision_log.json)
+    Final Decision (printed to terminal + saved to decision_agents/agent4/decision_log.json)
 
 Run:
-  python agent4_governance.py
-  python agent4_governance.py --payload dummy_payload.json
-  python agent4_governance.py --payload my_custom_payload.json
+    python decision_agents/agent4/agent4_governance.py
+    python decision_agents/agent4/agent4_governance.py --payload decision_agents/agent4/dummy_payload.json
 """
 
 from __future__ import annotations
@@ -29,6 +28,7 @@ import json
 import logging
 import os
 import asyncio
+import socket
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from enum import Enum
@@ -45,6 +45,71 @@ logging.basicConfig(
 logger = logging.getLogger("agent4.governance")
 
 
+def _add_file_logger(log_path: str, encoding: str = "utf-8") -> None:
+    """Mirror console logs into a file using the same format."""
+    root = logging.getLogger()
+    abs_path = os.path.abspath(log_path)
+    if any(isinstance(h, logging.FileHandler) and getattr(h, "baseFilename", "") == abs_path for h in root.handlers):
+        return
+
+    file_handler = logging.FileHandler(abs_path, encoding=encoding)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+    )
+    root.addHandler(file_handler)
+
+
+class _RedisSingleInstanceLock:
+    """Simple best-effort Redis lock so only one Agent 4 consumes the stream."""
+
+    def __init__(
+        self,
+        redis_host: str,
+        redis_port: int,
+        key: str,
+        ttl_seconds: int = 30,
+    ):
+        self.redis_host = redis_host
+        self.redis_port = redis_port
+        self.key = key
+        self.ttl_seconds = ttl_seconds
+        self.token = f"{socket.gethostname()}:{os.getpid()}"
+        self._redis = None
+
+    def acquire_or_exit(self) -> None:
+        import redis
+
+        self._redis = redis.Redis(host=self.redis_host, port=self.redis_port, decode_responses=True)
+        ok = self._redis.set(self.key, self.token, nx=True, ex=self.ttl_seconds)
+        if not ok:
+            current = self._redis.get(self.key)
+            raise SystemExit(
+                f"Another Agent 4 instance appears to be running (lock={self.key}, holder={current}). "
+                f"Stop the other instance or delete the key to proceed."
+            )
+
+    def refresh(self) -> None:
+        if not self._redis:
+            return
+        try:
+            val = self._redis.get(self.key)
+            if val == self.token:
+                self._redis.expire(self.key, self.ttl_seconds)
+        except Exception:
+            pass
+
+    def release(self) -> None:
+        if not self._redis:
+            return
+        try:
+            val = self._redis.get(self.key)
+            if val == self.token:
+                self._redis.delete(self.key)
+        except Exception:
+            pass
+
+
 # ─────────────────────────────────────────────
 # Enums and Data Models
 # ─────────────────────────────────────────────
@@ -59,6 +124,7 @@ class GovernanceOutcome(str, Enum):
 class FlagReason(str, Enum):
     LOW_CONFIDENCE     = "low_confidence"
     AGGRESSIVE_SCALE   = "aggressive_scale"
+    HIGH_CPU_RISK      = "high_cpu_risk"
     HIGH_MEMORY_RISK   = "high_memory_risk"
     SCALE_DOWN_RISK    = "scale_down_risk"
 
@@ -84,6 +150,7 @@ class GovernanceConfig:
     CPU_FORECAST_HIGH_THRESHOLD    = 0.90   # p90 above this = high pressure
     MEMORY_FORECAST_HIGH_THRESHOLD = 0.85   # p90 above this = high memory risk
     SCALE_DOWN_MIN_CONFIDENCE      = 0.65   # scale-down needs higher confidence
+    MAX_REPLICAS_ABSOLUTE          = 20     # Never allow more than 20 pods in a demo/test
 
 
 # ─────────────────────────────────────────────
@@ -106,8 +173,20 @@ class RuleEngine:
         current_replicas  = payload.get("current_replicas", 1)
         recommended       = payload.get("recommended_replicas", current_replicas)
         action            = payload.get("recommended_action", "none")
-        cpu_p90_15m       = payload.get("cpu_forecast_p90_15m", 0.0)
-        memory_p90_15m    = payload.get("memory_forecast_p90_15m", 0.0)
+        cpu_p90_15m       = float(payload.get("cpu_forecast_p90_15m", 0.0) or 0.0)
+        memory_p90_15m_raw = float(payload.get("memory_forecast_p90_15m", 0.0) or 0.0)
+        memory_limit      = float(payload.get("memory_limit", 0.0) or 0.0)
+
+        # Memory forecast should normally be a ratio (~0..2). If it's huge, it's likely bytes.
+        if memory_p90_15m_raw > 10.0:
+            memory_p90_15m = (memory_p90_15m_raw / memory_limit) if memory_limit > 0 else None
+            if memory_p90_15m is None:
+                logger.info(
+                    "  [INFO] memory_p90_15m appears to be bytes but memory_limit is missing; "
+                    "skipping ratio-based memory governance rule"
+                )
+        else:
+            memory_p90_15m = memory_p90_15m_raw
 
         # Rule 1 — Low confidence flag
         if confidence < self.cfg.CONFIDENCE_LOW_THRESHOLD:
@@ -128,21 +207,34 @@ class RuleEngine:
                     f"(threshold={self.cfg.SCALE_JUMP_AGGRESSIVE_RATIO}x)"
                 )
 
-        # Rule 3 — High memory pressure (even if CPU is okay)
-        if memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD:
+        # Rule 3 — High CPU pressure (even if memory is okay)
+        if cpu_p90_15m > self.cfg.CPU_FORECAST_HIGH_THRESHOLD:
+            flags.append(FlagReason.HIGH_CPU_RISK)
+            logger.info(
+                f"  [FLAG] {FlagReason.HIGH_CPU_RISK}: "
+                f"cpu_p90_15m={cpu_p90_15m:.2f} > threshold={self.cfg.CPU_FORECAST_HIGH_THRESHOLD}"
+            )
+
+        # Rule 4 — High memory pressure (even if CPU is okay)
+        if memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD:
             flags.append(FlagReason.HIGH_MEMORY_RISK)
             logger.info(
                 f"  [FLAG] {FlagReason.HIGH_MEMORY_RISK}: "
                 f"memory_p90_15m={memory_p90_15m:.2f} > threshold={self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD}"
             )
 
-        # Rule 4 — Scale-down with low confidence is dangerous
+        # Rule 5 — Scale-down with low confidence is dangerous
         if action == "scale_down" and confidence < self.cfg.SCALE_DOWN_MIN_CONFIDENCE:
             flags.append(FlagReason.SCALE_DOWN_RISK)
             logger.info(
                 f"  [FLAG] {FlagReason.SCALE_DOWN_RISK}: "
                 f"scale_down with confidence={confidence:.2f} < {self.cfg.SCALE_DOWN_MIN_CONFIDENCE}"
             )
+
+        # Sanity Check — Absolute Maximum Replicas
+        if recommended > self.cfg.MAX_REPLICAS_ABSOLUTE:
+            flags.append(FlagReason.AGGRESSIVE_SCALE)
+            logger.info(f"  [FLAG] {FlagReason.AGGRESSIVE_SCALE}: Sanity check triggered: {recommended} replicas is insane.")
 
         return flags
 
@@ -163,6 +255,13 @@ class RuleEngine:
 #   model = genai.GenerativeModel("gemini-1.5-flash")
 #   return model.generate_content(prompt).text
 
+from pydantic import BaseModel, Field, ValidationError
+
+class LLMResponseSchema(BaseModel):
+    should_approve: bool
+    final_replicas: int = Field(gt=0, le=20) # Must be greater than 0, less than 20
+    reasoning: str
+
 class LLMReasoner:
     """
     Receives the full context (payload + flags) and returns a
@@ -170,13 +269,62 @@ class LLMReasoner:
     Currently MOCKED — replace reason() with a real API call.
     """
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model_type="local", local_model_path="models/governance_qwen_3b_q4_k_m.gguf"):
+        self.mode = model_type # "local" or "groq"
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
-        if self.api_key:
+        
+        if self.mode == "groq" and self.api_key:
             from groq import AsyncGroq
             self.client = AsyncGroq(api_key=self.api_key)
+            self.local_llm = None
         else:
             self.client = None
+            try:
+                from llama_cpp import Llama
+                logger.info(f"Loading local LLM from {local_model_path}...")
+                self.local_llm = Llama(
+                    model_path=local_model_path,
+                    n_ctx=2048,
+                    n_gpu_layers=-1, # GPU acceleration if available
+                    verbose=False
+                )
+                logger.info("Local LLM loaded successfully.")
+            except ImportError:
+                logger.warning("llama-cpp-python not installed. Falling back to mock.")
+                self.local_llm = None
+            except ValueError as e:
+                logger.warning(f"Could not load local model: {e}. Falling back to mock.")
+                self.local_llm = None
+
+    def _build_prompt(self, payload: dict, flags: list[FlagReason]) -> str:
+        """
+        THIS IS THE CORE LOGIC. 
+        It turns raw numbers into a narrative for the LLM.
+        """
+        flag_text = ", ".join(f.value for f in flags) if flags else "none"
+        
+        # We add "Human Labels" to the numbers to help a small 3B model understand
+        cpu_label = "CRITICAL" if payload.get('cpu_forecast_p90_15m', 0) > 0.9 else "NORMAL"
+        conf_label = "UNRELIABLE" if payload.get('confidence', 1.0) < 0.4 else "TRUSTED"
+
+        current = payload.get('current_replicas', 1)
+        recommended = payload.get('recommended_replicas', current)
+
+        return f"""Review this Kubernetes scaling decision:
+
+Target Pod: {payload.get('pod')} (QoS: {payload.get('qos_class', 'Burstable')})
+Proposed Action: {payload.get('recommended_action')}
+Scale Delta: {current} -> {recommended}
+Model Confidence: {payload.get('confidence')} ({conf_label})
+Resource Pressure: CPU {payload.get('cpu_forecast_p90_15m')} ({cpu_label}), Mem {payload.get('memory_forecast_p90_15m')}
+Flags Raised: {flag_text}
+
+STRICT OUTPUT RULES:
+- If you APPROVE: set final_replicas to {recommended}
+- If you REJECT: set final_replicas to {current} (the current safe count — NEVER 0)
+- final_replicas must be a positive integer between 1 and 20
+
+Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas": int, "reasoning": "string"}}"""
 
     async def reason(
         self,
@@ -190,27 +338,12 @@ class LLMReasoner:
             final_replicas (int)  — LLM's recommended replica count
         """
 
-        # ── Build context string for the prompt ──────────────────────────
-        flag_text = ", ".join(f.value for f in flags) if flags else "none"
-        prompt = f"""
-You are a Kubernetes autoscaling governance agent. 
-Review the following scaling decision, and output a JSON object containing EXACTLY these keys:
-{{"should_approve": true/false, "final_replicas": integer, "reasoning": "brief explanation"}}
-
-  Pod:               {payload.get('pod')}
-  Namespace:         {payload.get('namespace')}
-  Action:            {payload.get('recommended_action')}
-  Current replicas:  {payload.get('current_replicas')}
-  Recommended:       {payload.get('recommended_replicas')}
-  Confidence score:  {payload.get('confidence')} (0.0 = unreliable, 1.0 = reliable)
-  CPU  p90 (15m):    {payload.get('cpu_forecast_p90_15m')}
-  Mem  p90 (15m):    {payload.get('memory_forecast_p90_15m')}
-  Reason from Agent 3: {payload.get('reason', 'N/A')}
-  Flags raised:      {flag_text}
-"""
+        # 1. Build the prompt
+        prompt = self._build_prompt(payload, flags)
         logger.debug("LLM Prompt:\n" + prompt)
 
-        if self.client:
+        # 2. Call the Model
+        if self.mode == "groq" and self.client:
             try:
                 response = await self.client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
@@ -223,15 +356,57 @@ Review the following scaling decision, and output a JSON object containing EXACT
                 import json
                 try:
                     data = json.loads(res_text)
-                    return data.get("reasoning", "No reasoning provided"), data.get("should_approve", False), data.get("final_replicas", payload.get('current_replicas', 1))
+                    validated_data = LLMResponseSchema(**data)
+                    should_approve = validated_data.should_approve
+                    final_replicas = validated_data.final_replicas
+                    
+                    if not should_approve:
+                        final_replicas = payload.get("current_replicas", 1) # Force safety hold
+                        
+                    return validated_data.reasoning, should_approve, final_replicas
                 except json.JSONDecodeError:
                     return f"Failed to parse LLM JSON: {res_text}", False, payload.get('current_replicas', 1)
+                except ValidationError as e:
+                    logger.error(f"LLM output failed schema validation: {e}")
+                    return "LLM returned malformed data.", False, payload.get('current_replicas', 1)
             except Exception as e:
                 logger.error(f"Groq API Error: {e}")
                 return "LLM unreachable, defaulting to safe hold.", False, payload.get('current_replicas', 1)
+        elif self.local_llm:
+            try:
+                logger.info("Running local LLM inference...")
+                response = self.local_llm.create_chat_completion(
+                    messages=[
+                        {"role": "system", "content": "You are a Kubernetes autoscaling governance agent. Always respond with a JSON object containing: should_approve (boolean), final_replicas (integer), reasoning (string)."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    max_tokens=200,
+                    temperature=0.1
+                )
+                res_text = response["choices"][0]["message"]["content"]
+                import json
+                try:
+                    data = json.loads(res_text)
+                    validated_data = LLMResponseSchema(**data)
+                    should_approve = validated_data.should_approve
+                    final_replicas = validated_data.final_replicas
+                    
+                    if not should_approve:
+                        final_replicas = payload.get("current_replicas", 1) # Force safety hold
+                        
+                    return validated_data.reasoning, should_approve, final_replicas
+                except json.JSONDecodeError:
+                    return f"Failed to parse LLM JSON: {res_text}", False, payload.get('current_replicas', 1)
+                except ValidationError as e:
+                    logger.error(f"LLM output failed schema validation: {e}")
+                    return "LLM returned malformed data.", False, payload.get('current_replicas', 1)
+            except Exception as e:
+                logger.error(f"Local LLM Error: {e}")
+                return "Local LLM failed, defaulting to safe hold.", False, payload.get('current_replicas', 1)
         else:
-            logger.warning("No GROQ_API_KEY found, using mock LLM response.")
-            return self._mock_llm_response(payload, flags)
+             logger.warning("No GROQ_API_KEY and no local model loaded, using mock LLM response.")
+             return self._mock_llm_response(payload, flags)
 
     def _mock_llm_response(
         self,
@@ -279,11 +454,22 @@ Review the following scaling decision, and output a JSON object containing EXACT
                 current,
             )
 
-        # High memory risk alone → approve but keep replicas at the recommendation
-        if FlagReason.HIGH_MEMORY_RISK in flags:
+        # High CPU risk alone → approve to prevent throttling
+        if FlagReason.HIGH_CPU_RISK in flags and FlagReason.HIGH_MEMORY_RISK not in flags:
             return (
-                f"Memory forecast p90 is elevated. The scale recommendation of "
-                f"{recommend} replicas is appropriate to distribute memory pressure. "
+                f"CPU forecast p90 is critically elevated ({payload.get('cpu_forecast_p90_15m', 0):.2f}). "
+                f"The scale recommendation of {recommend} replicas is appropriate to "
+                f"prevent CPU throttling. Approving with monitoring advisory.",
+                True,
+                recommend,
+            )
+
+        # High memory risk (with or without CPU risk) → approve to distribute pressure
+        if FlagReason.HIGH_MEMORY_RISK in flags:
+            cpu_also = " CPU and" if FlagReason.HIGH_CPU_RISK in flags else ""
+            return (
+                f"{cpu_also} Memory forecast p90 is elevated. The scale recommendation of "
+                f"{recommend} replicas is appropriate to distribute resource pressure. "
                 f"Approving with 15-minute cooldown enforced.",
                 True,
                 recommend,
@@ -306,7 +492,8 @@ class GovernanceAgent:
 
     def __init__(self, groq_api_key: str = None):
         self.rule_engine  = RuleEngine(GovernanceConfig())
-        self.llm_reasoner = LLMReasoner(api_key=groq_api_key)
+        model_type = "groq" if groq_api_key else "local"
+        self.llm_reasoner = LLMReasoner(api_key=groq_api_key, model_type=model_type)
 
     async def run(self, payload: dict) -> GovernanceDecision:
         logger.info("=" * 60)
@@ -325,6 +512,33 @@ class GovernanceAgent:
 
         current_replicas = payload.get("current_replicas", 1)
         recommended      = payload.get("recommended_replicas", current_replicas)
+
+        # [NEW] CIRCUIT BREAKER 1: The "OOM Panic" Fast-Track
+        memory_p90 = payload.get("memory_forecast_p90_15m", 0.0)
+        if memory_p90 > 0.95 and payload.get("recommended_action") == "scale_up":
+            logger.warning("CIRCUIT BREAKER: OOM Panic Fast-Track triggered.")
+            return GovernanceDecision(
+                outcome=GovernanceOutcome.APPROVED,
+                approved_replicas=recommended,
+                flags=[f.value for f in flags] + ["OOM_PANIC_OVERRIDE"],
+                rule_explanation="CRITICAL MEMORY: Bypassed LLM to prevent imminent OOM crash.",
+                llm_reasoning=None,
+                final_explanation="Emergency fast-track approval executed due to >95% memory pressure.",
+                timestamp=datetime.now(timezone.utc).isoformat()
+            )
+
+        # [NEW] CIRCUIT BREAKER 2: The "Insanity" Hard-Reject
+        if recommended > self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE:
+            logger.warning(f"CIRCUIT BREAKER: Insanity Hard-Reject triggered. {recommended} > {self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}")
+            return GovernanceDecision(
+                outcome=GovernanceOutcome.REJECTED,
+                approved_replicas=current_replicas,
+                flags=[f.value for f in flags] + ["INSANITY_HARD_REJECT"],
+                rule_explanation=f"Requested {recommended} > Absolute Max ({self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}).",
+                llm_reasoning=None,
+                final_explanation="Hard rejected by rule engine due to mathematically impossible recommendation.",
+                timestamp=datetime.now(timezone.utc).isoformat()
+            )
 
         if not flags:
             logger.info("  ✓ No flags raised — decision auto-approved")
@@ -353,7 +567,15 @@ class GovernanceAgent:
             logger.info("")
             logger.info("Step 3: LLM Reasoning...")
 
+            import time
+            start_time = time.time()
             reasoning, should_approve, llm_replicas = await self.llm_reasoner.reason(payload, flags)
+            latency = time.time() - start_time
+            
+            logger.info(f"LLM Inference Latency: {latency:.2f} seconds")
+            if latency > 5.0:
+                logger.warning("LLM inference is degrading. Consider falling back to Rules-Only mode.")
+
             llm_reasoning  = reasoning
             final_replicas = llm_replicas
 
@@ -440,8 +662,18 @@ async def run_redis_mode(args):
     logger.info("Agent 4: Listening on stream:optimization:complete...")
     last_id = "$"  # Read only new messages
 
+    lock = _RedisSingleInstanceLock(
+        redis_host=args.redis_host,
+        redis_port=args.redis_port,
+        key=os.environ.get("PIPELINE_AGENT4_LOCK_KEY", "lock:agent4:governance"),
+        ttl_seconds=int(os.environ.get("PIPELINE_AGENT4_LOCK_TTL", "30")),
+    )
+    lock.acquire_or_exit()
+    logger.info("Agent 4 lock acquired.")
+
     try:
         while True:
+            lock.refresh()
             messages = await redis_store.read_stream_messages(
                 stream_name="stream:optimization:complete",
                 last_id=last_id,
@@ -462,6 +694,7 @@ async def run_redis_mode(args):
                     "cpu_forecast_p50_5m", "cpu_forecast_p90_5m", "cpu_forecast_p90_15m",
                     "memory_forecast_p50_5m", "memory_forecast_p90_5m", "memory_forecast_p90_15m",
                     "throttle_prob", "oom_prob",
+                    "cpu_limit", "memory_limit",
                 ):
                     if key in payload:
                         try:
@@ -476,7 +709,28 @@ async def run_redis_mode(args):
                             pass
 
                 # Run governance
-                decision = await agent.run(payload)
+                ns = payload.get('namespace', 'default')
+                pod = payload.get('pod', 'unknown')
+                action = payload.get('recommended_action')
+                cooldown_key = f"cooldown:{ns}:{pod}"
+                
+                last_action = await redis_store.client.get(cooldown_key)
+                if last_action == "scale_up" and action == "scale_down":
+                    logger.warning("Anti-flapping triggered. Rejecting scale-down during cooldown window.")
+                    decision = GovernanceDecision(
+                        outcome=GovernanceOutcome.REJECTED,
+                        approved_replicas=payload.get("current_replicas", 1),
+                        flags=["ANTI_FLAPPING_COOLDOWN"],
+                        rule_explanation="Anti-flapping triggered by Redis cooldown key.",
+                        llm_reasoning=None,
+                        final_explanation="Rejected scale-down to prevent cluster thrashing.",
+                        timestamp=datetime.now(timezone.utc).isoformat()
+                    )
+                else:
+                    decision = await agent.run(payload)
+                    if decision.outcome in (GovernanceOutcome.APPROVED, GovernanceOutcome.APPROVED_WITH_CAP, GovernanceOutcome.ESCALATED_TO_LLM):
+                        await redis_store.client.setex(cooldown_key, 300, action)
+
 
                 # Print to terminal
                 print_decision(decision, payload)
@@ -504,6 +758,7 @@ async def run_redis_mode(args):
     except KeyboardInterrupt:
         logger.info("Stopping Agent 4 Redis loop.")
     finally:
+        lock.release()
         await redis_store.close()
 
 async def async_main(args):
@@ -539,6 +794,21 @@ def main():
         description="Agent 4: Governance and LLM Reasoning"
     )
     parser.add_argument(
+        "--log-file",
+        type=str,
+        default=os.environ.get(
+            "PIPELINE_AGENT4_LOG_FILE",
+            str(Path(__file__).resolve().parent / "agent4_log.txt"),
+        ),
+        help="Path to write Agent 4 logs (default: agent4_log.txt)",
+    )
+    parser.add_argument(
+        "--log-encoding",
+        type=str,
+        default=os.environ.get("PIPELINE_AGENT4_LOG_ENCODING", "utf-8"),
+        help="Log file encoding (default: utf-8; use utf-16 to mimic PowerShell-style logs)",
+    )
+    parser.add_argument(
         "--mode",
         type=str,
         choices=["file", "redis"],
@@ -554,7 +824,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="decision_log.json",
+        default=str(Path(__file__).resolve().parent / "decision_log.json"),
         help="(File mode) Path to write the governance decision JSON (default: decision_log.json)",
     )
     parser.add_argument(
@@ -576,6 +846,8 @@ def main():
         help="Groq API Key (default: $GROQ_API_KEY)",
     )
     args = parser.parse_args()
+
+    _add_file_logger(args.log_file, encoding=args.log_encoding)
     
     asyncio.run(async_main(args))
 

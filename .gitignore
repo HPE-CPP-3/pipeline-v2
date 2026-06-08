@@ -81,16 +81,22 @@ pypy-*/
 *.h5
 *.pth
 *.pt
-data/csv/
-data/models/
+*.gguf
 
 # Logs
 *.log
 logs/
-agent3_log.txt
-action_log.json
-decision_log.json
-agent4_ready_payload.json
+
+# Decision agents (generated artifacts)
+decision_agents/**/agent3_log.txt
+decision_agents/**/agent4_log.txt
+decision_agents/**/action_log.json
+decision_agents/**/agent4_ready_payload.json
+decision_agents/**/decision_log.json
+
+# Generated output data
+data/csv/metrics/*.csv
+data/csv/predictions/*.csv
 
 # OS
 .DS_Store
@@ -98,5 +104,4 @@ Thumbs.db
 
 # Secret manifests (never commit)
 *-secret.yaml
-
 
