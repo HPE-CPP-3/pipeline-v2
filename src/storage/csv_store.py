@@ -160,7 +160,7 @@ class CSVStore:
             "container_cpu_usage_seconds_total",
             "container_cpu_cfs_throttled_seconds_total",
             "container_memory_working_set_bytes",
-            "container_memory_failures_total",
+            "container_memory_failcnt",
             "node_load1",
             "node_load5",
             "node_load15",

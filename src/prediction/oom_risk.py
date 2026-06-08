@@ -71,11 +71,6 @@ class OOMRiskCalculator:
         p90_10min = memory_forecast.get(10, {}).get(0.9, 0.0)
         p90_5min = memory_forecast.get(5, {}).get(0.9, 0.0)
 
-        if p90_15min < 1000 and memory_limit > 1_000_000:
-            p90_15min = p90_15min * memory_limit
-            p90_10min = p90_10min * memory_limit
-            p90_5min = p90_5min * memory_limit
-
         # Calculate ratios
         ratio_15min = p90_15min / memory_limit
         ratio_10min = p90_10min / memory_limit

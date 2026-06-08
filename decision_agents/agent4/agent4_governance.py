@@ -154,6 +154,17 @@ class GovernanceConfig:
 
 
 # ─────────────────────────────────────────────
+# Helper: extract deployment name from pod name
+# ─────────────────────────────────────────────
+def _get_workload_name(pod_name: str) -> str:
+    """Resolve the workload/deployment name by removing pod‑specific hashes/suffixes."""
+    parts = pod_name.split("-")
+    if len(parts) > 2:
+        return "-".join(parts[:-2])
+    return pod_name
+
+
+# ─────────────────────────────────────────────
 # Rule-Based Engine
 # ─────────────────────────────────────────────
 
@@ -259,7 +270,7 @@ class LLMReasoner:
         self,
         api_key: str = None,
         model_type="hosted",
-        local_model_path="models/governance_qwen_3b_q4_k_m.gguf",
+        local_model_path="data/models/governance_qwen_3b_q4_k_m.gguf",
         gemini_model: str | None = None,
         hosted_llm_url: str | None = None,
         hosted_llm_model: str | None = None,
@@ -822,7 +833,10 @@ async def run_redis_mode(args):
                 ns = payload.get('namespace', 'default')
                 pod = payload.get('pod', 'unknown')
                 action = payload.get('recommended_action')
-                cooldown_key = f"cooldown:{ns}:{pod}"
+                
+                # Use deployment name for anti‑flapping (issue #11)
+                deployment = _get_workload_name(pod)
+                cooldown_key = f"cooldown:{ns}:{deployment}"
                 
                 last_action = await redis_store.client.get(cooldown_key)
                 if last_action == "scale_up" and action == "scale_down":
@@ -841,7 +855,6 @@ async def run_redis_mode(args):
                     if decision.outcome in (GovernanceOutcome.APPROVED, GovernanceOutcome.APPROVED_WITH_CAP, GovernanceOutcome.ESCALATED_TO_LLM):
                         await redis_store.client.setex(cooldown_key, 300, action)
 
-
                 # Print to terminal
                 print_decision(decision, payload)
 
@@ -849,7 +862,8 @@ async def run_redis_mode(args):
                 # Redis Streams require string values; lists must be JSON-encoded.
                 gov_dict = asdict(decision)
                 gov_dict["flags"] = json.dumps(gov_dict["flags"])  # list → JSON string
-                gov_dict["outcome"] = str(gov_dict["outcome"])
+                # Use .value to get plain string (e.g. "APPROVED") not enum representation (issue #1)
+                gov_dict["outcome"] = decision.outcome.value
                 # Copy pod identity fields from incoming payload for traceability
                 for field in ("namespace", "pod", "container", "recommended_action"):
                     if field in payload:
@@ -861,7 +875,7 @@ async def run_redis_mode(args):
                 )
                 logger.info(
                     f"Published governance decision to stream:governance:complete "
-                    f"(outcome={decision.outcome}, replicas={decision.approved_replicas}, "
+                    f"(outcome={decision.outcome.value}, replicas={decision.approved_replicas}, "
                     f"ID={out_id})\n"
                 )
 

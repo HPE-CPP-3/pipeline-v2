@@ -349,7 +349,7 @@ class PrometheusClient:
             for ts, val in values
         ]
 
-    async def get_container_memory_failures_total(
+    async def get_container_memory_failcnt(
         self,
         namespace: str,
         pod_name: str,
@@ -357,7 +357,7 @@ class PrometheusClient:
         window_minutes: int = 60,
     ) -> list[tuple[datetime, float]]:
         selector = self._selector(namespace, pod_name, container_name)
-        query = f'rate(container_memory_failures_total{{{selector}, container!="", image!=""}}[5m])'
+        query = f'container_memory_failcnt{{{selector}, container!="", image!=""}}'
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
         result = self.query_range(query, start, end, step=60)

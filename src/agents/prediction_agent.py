@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # Default risk calculator config — mirrors configs/prediction.yaml
 _DEFAULT_THROTTLE_CFG = {
     "critical_ratio": 0.95,
-    "high_ratio": 0.85,
+    "high_ratio": 0.70,
     "current_throttle_ratio_high": 0.1,
 }
 _DEFAULT_OOM_CFG = {
@@ -113,6 +113,7 @@ class WorkloadPredictionAgent:
         self._mu: dict = {}
         self._sigma: dict = {}
         self._ckpt_mtime: float = 0.0
+        self._context_len: int = 60  # default, will be overwritten by checkpoint
 
     # ------------------------------------------------------------------
     # Main loop
@@ -155,7 +156,7 @@ class WorkloadPredictionAgent:
                     pod = msg.get("pod", "stress-test-app")
                     reason = msg.get("reason", "Unknown trigger")
                     logger.info(f"[Prediction Agent] Received retrain request for {namespace}/{pod}: {reason}")
-                    
+
                     # Run in executor so we don't block the event loop during training
                     await asyncio.get_event_loop().run_in_executor(
                         None,
@@ -181,12 +182,6 @@ class WorkloadPredictionAgent:
         features_json = msg.get("features_json", "{}")
         latest_features = json.loads(features_json)
 
-        # DEBUG: Check for NaN in features
-        import math
-        nan_keys = [k for k, v in latest_features.items() if isinstance(v, float) and math.isnan(v)]
-        if nan_keys:
-            logger.warning(f"NaN values in features: {nan_keys}")
-
         # Raw limits published by ingestion_agent before normalisation
         raw_limits: dict = json.loads(msg.get("raw_limits_json", "{}"))
         cpu_limit: float = raw_limits.get("cpu_limit", 0.0)
@@ -194,8 +189,7 @@ class WorkloadPredictionAgent:
         current_throttle_ratio: float = raw_limits.get("throttle_ratio", 0.0)
         current_failcnt: int = int(raw_limits.get("memory_failcnt", 0))
 
-        # DEBUG: Log raw limits
-        logger.info(f"Raw limits: cpu={cpu_limit}, mem={memory_limit}, throttle={current_throttle_ratio}, failcnt={current_failcnt}")
+        logger.debug(f"Raw limits: cpu={cpu_limit}, mem={memory_limit}, throttle={current_throttle_ratio}, failcnt={current_failcnt}")
 
         # Redis latest feature vector
         latest_df = pd.DataFrame([latest_features])
@@ -356,7 +350,7 @@ class WorkloadPredictionAgent:
             if "timestamp" not in df.columns:
                 if "Unnamed: 0" in df.columns:
                     df = df.rename(columns={"Unnamed: 0": "timestamp"})
-            
+
             # Coerce all columns except timestamp and metadata to numeric
             metadata_cols = {"timestamp", "namespace", "pod", "container", "node"}
             for col in df.columns:
@@ -464,15 +458,12 @@ class WorkloadPredictionAgent:
             logger.warning(f"CSV not found: {csv_file}")
             return None
         try:
-            # Some historical CSVs were written with different schemas; skip malformed lines.
             df = pd.read_csv(csv_file, on_bad_lines="skip")
-            # Rename index column back to timestamp if needed
             if "timestamp" not in df.columns and df.index.name == "timestamp":
                 df = df.reset_index()
             elif "timestamp" not in df.columns and "Unnamed: 0" in df.columns:
                 df = df.rename(columns={"Unnamed: 0": "timestamp"})
-            
-            # Coerce all columns except timestamp and metadata to numeric
+
             metadata_cols = {"timestamp", "namespace", "pod", "container", "node"}
             for col in df.columns:
                 if col not in metadata_cols:
@@ -494,10 +485,6 @@ class WorkloadPredictionAgent:
     # ------------------------------------------------------------------
     # Inference helpers
     # ------------------------------------------------------------------
-
-    # In src/agents/prediction_agent.py, replace _build_model_input with:
-
-    # In src/agents/prediction_agent.py, replace the entire _build_model_input method:
 
     def _ensure_inference_cache(self) -> bool:
         """Load train_mod + checkpoint into cache. Reload only if checkpoint changed on disk."""
@@ -540,24 +527,25 @@ class WorkloadPredictionAgent:
         self._feature_cols = ckpt.get("feature_cols", [])
         self._mu = ckpt.get("mu", {})
         self._sigma = ckpt.get("sigma", {})
+        self._context_len = ckpt.get("context_len", 60)
         self._ckpt_mtime = current_mtime
-        logger.info(f"Cached checkpoint metadata: {len(self._feature_cols)} features")
+        logger.info(f"Cached checkpoint metadata: {len(self._feature_cols)} features, context_len={self._context_len}")
         return True
-
 
     def _build_model_input(
         self, historical: pd.DataFrame, latest_df: pd.DataFrame
     ) -> np.ndarray:
         """Build input tensor matching training feature dimensions and normalization."""
         if not self._ensure_inference_cache():
-            return np.zeros((1, 60, 26), dtype=np.float32)
+            return np.zeros((1, self._context_len, 26), dtype=np.float32)
 
         feature_cols = self._feature_cols
         n_features = len(feature_cols)
+        context_len = self._context_len
 
         if not feature_cols:
             logger.warning("No feature_cols in cache")
-            return np.zeros((1, 60, 26), dtype=np.float32)
+            return np.zeros((1, context_len, 26), dtype=np.float32)
 
         # --- feature engineering ---
         df_to_engineer = historical.copy()
@@ -581,23 +569,22 @@ class WorkloadPredictionAgent:
         available_cols = [c for c in feature_cols if c in engineered.columns]
         if not available_cols:
             logger.warning("No matching feature columns after engineering")
-            return np.zeros((1, 60, n_features), dtype=np.float32)
+            return np.zeros((1, context_len, n_features), dtype=np.float32)
 
         if len(available_cols) < 10:
             missing = set(feature_cols) - set(engineered.columns)
             logger.warning(f"Missing {len(missing)} features: {list(missing)[:10]}")
 
-        # --- extract last 60 rows into full-width array ---
-        # Explicitly coerce to numeric, converting any accidental string/categorical values to NaN and then 0.0
+        # --- extract last context_len rows into full-width array ---
         engineered_numeric = engineered[available_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
-        src = engineered_numeric.tail(60).to_numpy(dtype=np.float32)
-        if src.shape[0] < 60:
+        src = engineered_numeric.tail(context_len).to_numpy(dtype=np.float32)
+        if src.shape[0] < context_len:
             src = np.concatenate(
-                [np.zeros((60 - src.shape[0], len(available_cols)), dtype=np.float32), src],
+                [np.zeros((context_len - src.shape[0], len(available_cols)), dtype=np.float32), src],
                 axis=0,
             )
 
-        full_arr = np.zeros((60, n_features), dtype=np.float32)
+        full_arr = np.zeros((context_len, n_features), dtype=np.float32)
         for col, col_src in zip(available_cols, src.T):
             full_arr[:, feature_cols.index(col)] = col_src
 
@@ -614,7 +601,7 @@ class WorkloadPredictionAgent:
         full_arr = np.clip(full_arr, -5.0, 5.0)
         full_arr = np.nan_to_num(full_arr, nan=0.0, posinf=5.0, neginf=-5.0)
 
-        return full_arr.reshape(1, 60, n_features)
+        return full_arr.reshape(1, context_len, n_features)
 
     def _compute_confidence(
         self, latest_df: pd.DataFrame, historical: pd.DataFrame
@@ -623,9 +610,7 @@ class WorkloadPredictionAgent:
         if h.empty:
             return 0.5
 
-        # To avoid scale mismatch (historical is raw metrics while latest_df is normalized [0,1]),
-        # we extract the latest raw metrics from the last row of the historical DataFrame
-        # since ingestion_agent appends the latest raw row to historical CSV before publishing.
+        # Use raw historical data for z‑score (not normalized latest)
         l = h.tail(1)
         cols = list(l.columns)
         if not cols:

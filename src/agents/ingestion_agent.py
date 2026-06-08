@@ -6,7 +6,7 @@ Collects Prometheus metrics, normalises them, and publishes to:
   - CSV store (both normalised + raw, for fine-tuning)
   - Redis Stream "stream:ingestion:complete" (with raw limits embedded so
     the prediction agent can run rule-based calculators without re-querying
-    Prometheus)
+    Prometheus; also raw features for drift detection)
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 _CPU_LIMIT_COL = "kube_pod_container_resource_limits_cpu"
 _MEM_LIMIT_COL = "kube_pod_container_resource_limits_memory"
 _THROTTLE_RATIO_COL = "derived_pressure_throttled_ratio"
-_MEM_FAIL_COL = "container_memory_failures_total"
+_MEM_FAIL_COL = "container_memory_failcnt"
 
 
 class LogIngestionAgent:
@@ -83,7 +83,7 @@ class LogIngestionAgent:
                 ]
                 if running_pods:
                     actual_pod = running_pods[0]
-                    target_config.pod_name = actual_pod
+                    # Do NOT mutate target_config (it is frozen). Instead, log the resolved pod.
                     logger.info(f"Dynamically resolved active pod: {actual_pod}")
         except Exception as e:
             logger.warning(f"Could not dynamically resolve active pod: {e}")
@@ -110,7 +110,7 @@ class LogIngestionAgent:
             container_name=container, 
             window_minutes=window_minutes,
         )
-        memory_fail = await self.prometheus.get_container_memory_failures_total(
+        memory_fail = await self.prometheus.get_container_memory_failcnt(
             namespace=namespace,
             pod_name=pod,
             container_name=container,
@@ -122,7 +122,7 @@ class LogIngestionAgent:
                 "container_cpu_usage_seconds_total": cpu_usage,
                 "container_cpu_cfs_throttled_seconds_total": cpu_throttled,
                 "container_memory_working_set_bytes": memory_ws,
-                "container_memory_failures_total": memory_fail,
+                "container_memory_failcnt": memory_fail,
             }
         )
 
@@ -174,45 +174,59 @@ class LogIngestionAgent:
             target_config=target_config, window_minutes=window_minutes
         )
 
-        # Keep a copy of the raw (pre-normalization) frame for fine-tuning
+        # Keep a copy of the raw (pre-normalization) frame for fine-tuning and raw features
         raw_df = result.raw_metrics.copy()
 
-        # --- Extract raw limits before normalization destroys them ---
+        # --- Extract raw limits (only a few fields) before normalization destroys them ---
         raw_limits = _extract_raw_limits(raw_df)
 
+        # --- Extract full raw feature vector (latest row) for drift detection ---
+        raw_features = {}
+        if not raw_df.empty:
+            last_raw = raw_df.iloc[-1]
+            for k, v in last_raw.to_dict().items():
+                if isinstance(v, (int, float)) and not pd.isna(v):
+                    raw_features[k] = float(v)
+
+        # Normalize
         df = self._normalize_rolling_minmax(result.raw_metrics.copy())
 
         if df.empty:
             return result
 
         latest = df.iloc[-1]
-        payload = {
+        normalized_features = {
             k: float(v)
             for k, v in latest.to_dict().items()
             if isinstance(v, (int, float))
         }
 
+        # Use resolved pod name from the result scope (not target_config, which is frozen)
+        pod = result.scope.pod
+        namespace = result.scope.namespace
+        container = result.scope.container
+
         await self.redis_store.store_features(
-            pod=target_config.pod_name,
-            namespace=target_config.namespace,
-            features=payload,
+            pod=pod,
+            namespace=namespace,
+            features=normalized_features,
             timestamp=datetime.now(timezone.utc),
         )
 
         await self.influxdb_store.write_metrics_dataframe(
-            namespace=target_config.namespace,
-            pod=target_config.pod_name,
+            namespace=namespace,
+            pod=pod,
             df=df,
-            container=target_config.container_name,
+            container=container,
             node=result.metadata.get("node"),
         )
 
         if self.csv_store is not None:
             await self.csv_store.write_metrics_dataframe(
-                namespace=target_config.namespace,
-                pod=target_config.pod_name,
+                namespace=namespace,
+                pod=pod,
                 df=df,
-                container=target_config.container_name,
+                container=container,
                 node=result.metadata.get("node"),
                 raw_df=raw_df,          # <-- pass raw frame so fine-tuner can use it
             )
@@ -220,17 +234,18 @@ class LogIngestionAgent:
         await self.redis_store.write_stream_message(
             stream_name="stream:ingestion:complete",
             payload={
-                "namespace": target_config.namespace,
-                "pod": target_config.pod_name,
-                "container": target_config.container_name or "",
-                "features_json": json.dumps(payload),
-                # Raw limits embedded here so prediction agent can run calculators
+                "namespace": namespace,
+                "pod": pod,
+                "container": container or "",
+                "features_json": json.dumps(normalized_features),
+                # Raw limits (subset) for rule‑based calculators
                 "raw_limits_json": json.dumps(raw_limits),
+                # Full raw feature vector for drift detection (Agent 5)
+                "raw_features_json": json.dumps(raw_features),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
-        result.raw_metrics = df
         return result
 
     async def run_loop(
@@ -321,8 +336,6 @@ class LogIngestionAgent:
 # Module-level helper (used by ingestion_agent and readable in tests)
 # ---------------------------------------------------------------------------
 
-# In src/agents/ingestion_agent.py, modify _extract_raw_limits:
-
 def _extract_raw_limits(raw_df: pd.DataFrame) -> dict:
     """
     Pull the last known raw (pre-normalization) values for resource limits
@@ -333,7 +346,8 @@ def _extract_raw_limits(raw_df: pd.DataFrame) -> dict:
             series = raw_df[col].dropna()
             if not series.empty:
                 val = float(series.iloc[-1])
-                # Cap failcnt to reasonable values
+                # Cap failcnt to reasonable values; note: this expects a count,
+                # not a rate. The Prometheus query must be changed accordingly.
                 if col == _MEM_FAIL_COL:
                     if val > 1000 or np.isnan(val):
                         return 0.0

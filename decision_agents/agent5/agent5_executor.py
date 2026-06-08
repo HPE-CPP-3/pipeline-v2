@@ -61,7 +61,7 @@ class _RedisSingleInstanceLock:
         redis_host: str,
         redis_port: int,
         key: str,
-        ttl_seconds: int = 30,
+        ttl_seconds: int = 60,
     ):
         self.redis_host = redis_host
         self.redis_port = redis_port
@@ -211,10 +211,12 @@ async def run_governance_listener(redis_store: RedisStore, executor: K8sExecutor
                 except ValueError:
                     approved_replicas = 1
 
-                is_approved = outcome in (
-                    "APPROVED", "GovernanceOutcome.APPROVED",
-                    "APPROVED_WITH_CAP", "GovernanceOutcome.APPROVED_WITH_CAP",
-                    "ESCALATED_TO_LLM", "GovernanceOutcome.ESCALATED_TO_LLM"
+                # Cleaner approval detection: accept any outcome containing "APPROVED" or "ESCALATED_TO_LLM"
+                # (case-insensitive, to handle both plain strings and enum representations)
+                outcome_upper = outcome.upper()
+                is_approved = (
+                    "APPROVED" in outcome_upper
+                    or "ESCALATED_TO_LLM" in outcome_upper
                 )
                 logger.info(
                     f"Decision details: outcome={outcome} (approved={is_approved}) | "
@@ -245,7 +247,11 @@ async def run_governance_listener(redis_store: RedisStore, executor: K8sExecutor
 
 
 async def run_drift_listener(redis_store: RedisStore, drift_detector: EMADriftDetector):
-    """Listens to stream:ingestion:complete, monitors feature drift, and signals retraining."""
+    """Listens to stream:ingestion:complete, monitors feature drift, and signals retraining.
+
+    Uses `raw_features_json` (original-scale metrics) for drift detection.
+    Falls back to `features_json` (normalized) if raw field is missing for backward compatibility.
+    """
     last_id = "$"
     logger.info("Agent 5: Listening on stream:ingestion:complete for drift detection...")
 
@@ -264,8 +270,25 @@ async def run_drift_listener(redis_store: RedisStore, drift_detector: EMADriftDe
                 pod_name = raw_payload.get("pod", "stress-test-app")
                 container = raw_payload.get("container", "")
 
-                features_json = raw_payload.get("features_json", "{}")
-                features = json.loads(features_json)
+                # Prefer raw features (original scale) for drift detection
+                raw_features_json = raw_payload.get("raw_features_json", "{}")
+                if raw_features_json and raw_features_json != "{}":
+                    features_json = raw_features_json
+                else:
+                    # Fallback to normalized features (backward compatibility)
+                    features_json = raw_payload.get("features_json", "{}")
+                    if features_json != "{}":
+                        logger.debug(f"No raw_features_json, using normalized features for {namespace}/{pod_name}")
+
+                if not features_json or features_json == "{}":
+                    logger.debug(f"No features found in message {msg_id}, skipping drift update")
+                    continue
+
+                try:
+                    features = json.loads(features_json)
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid JSON in features field for {msg_id}, skipping")
+                    continue
 
                 if not features:
                     continue
