@@ -289,3 +289,2098 @@ Traceback (most recent call last):
   File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
     raise e
 redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:11 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:11 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:16 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:16 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:22 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:22 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:27 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:27 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:39 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:39 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:44 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:44 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:51 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:51 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:56 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:23:56 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:11 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:11 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:16 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:16 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:27 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:27 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:32 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:32 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:43 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:43 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:48 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:24:48 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:25:02 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:25:02 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:25:07 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:25:07 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:25:21 [ERROR] Error in drift listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 254, in run_drift_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:25:21 [ERROR] Error in governance listener loop
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 371, in connect_check_health
+    await self._connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 895, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **self._connection_arguments()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib64/python3.14/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        lambda: protocol, host, port, **kwds)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/asyncio/base_events.py", line 1176, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/decision_agents/agent5/agent5_executor.py", line 193, in run_governance_listener
+    messages = await redis_store.read_stream_messages(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/src/storage/redis_store.py", line 189, in read_stream_messages
+    messages = await self.client.xread(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/commands/core.py", line 4462, in _record_and_return
+    actual_response = await response
+                      ^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/client.py", line 764, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/utils.py", line 227, in async_wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1448, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 1489, in ensure_connection
+    await connection.connect()
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 340, in connect
+    await self.retry.call_with_retry(
+    ...<7 lines>...
+    )
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 81, in call_with_retry
+    raise error
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/retry.py", line 69, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/vulcan/Abhay/Projects/HPE/pipeline-v2/.venv/lib64/python3.14/site-packages/redis/asyncio/connection.py", line 397, in connect_check_health
+    raise e
+redis.exceptions.ConnectionError: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6380, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6380) connecting to localhost:6380.
+17:25:40 [INFO] Agent 5 lock acquired.
+17:25:40 [INFO] Loaded drift configuration from /home/vulcan/Abhay/Projects/HPE/pipeline-v2/configs/training.yaml
+17:25:40 [INFO] Initialized RedisStore at localhost:6380
+17:25:40 [INFO] [K8s] Local kubeconfig loaded.
+17:25:40 [INFO] Initialized EMADriftDetector: alpha=0.1, z_threshold=3.0, feature_ratio=0.2
+17:25:40 [INFO] Agent 5: Listening on stream:governance:complete...
+17:25:40 [INFO] Agent 5: Listening on stream:ingestion:complete for drift detection...
+17:25:41 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-5dwxj. Current drift ratio: 0.0%
+17:25:41 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-5dwxj. Current drift ratio: 0.0%
+17:25:44 [INFO] --- Received Governance Decision 1780919744214-0 ---
+17:25:44 [INFO] --- Received Governance Decision 1780919744214-0 ---
+17:25:44 [INFO] Decision details: outcome=GovernanceOutcome.ESCALATED_TO_LLM (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-5dwxj
+17:25:44 [INFO] Decision details: outcome=GovernanceOutcome.ESCALATED_TO_LLM (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-5dwxj
+17:26:41 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-5dwxj. Current drift ratio: 31.6%
+17:26:41 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-5dwxj. Current drift ratio: 0.0%
+17:26:41 [INFO] Drift trigger #1: 6/19 features drifting (31.6%)
+17:26:41 [WARNING] [Drift] Feature drift detected for test-workload/stress-test-app-7758b96bd8-5dwxj (ratio=31.6%). Publishing retraining request.
+17:26:41 [INFO] --- Received Governance Decision 1780919801516-0 ---
+17:26:41 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-5dwxj
+17:26:41 [INFO] --- Received Governance Decision 1780919801516-0 ---
+17:26:41 [INFO] Decision details: outcome=GovernanceOutcome.APPROVED (approved=True) | action=hold | replicas=1 | target=test-workload/stress-test-app-7758b96bd8-5dwxj
