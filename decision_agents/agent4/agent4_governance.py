@@ -620,7 +620,7 @@ class GovernanceAgent:
 def print_decision(decision: GovernanceDecision, payload: dict):
     outcome_colors = {
         GovernanceOutcome.APPROVED:          "✅ APPROVED",
-        GovernanceOutcome.APPROVED_WITH_CAP: "⚠️  APPROVED WITH CAP",
+        GovernanceOutcome.APPROVED_WITH_CAP: "⚠️ APPROVED WITH CAP",
         GovernanceOutcome.ESCALATED_TO_LLM:  "🤖 APPROVED (via LLM)",
         GovernanceOutcome.REJECTED:          "❌ REJECTED",
     }
