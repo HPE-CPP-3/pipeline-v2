@@ -1245,6 +1245,29 @@ async def run_redis_mode(
                 decision       = agent.run(forecast)
                 agent4_payload = agent.to_agent4_payload(decision)
 
+                # Persist the agent outputs into the log file as JSON.
+                # In Redis mode we don't write action_log.json (file mode only),
+                # so this provides a durable, greppable record of decisions.
+                try:
+                    logger.info(
+                        "[OUTPUT] scaling_decision=%s",
+                        json.dumps(
+                            asdict(decision),
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                    )
+                    logger.info(
+                        "[OUTPUT] agent4_payload=%s",
+                        json.dumps(
+                            agent4_payload,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                    )
+                except Exception as e:
+                    logger.warning(f"[OUTPUT] Failed to serialize outputs: {e}")
+
                 print_decision(decision, agent4_payload)
 
                 out_id = await redis_store.write_stream_message(

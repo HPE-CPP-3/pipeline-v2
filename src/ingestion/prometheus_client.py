@@ -38,6 +38,7 @@ class PrometheusClient:
             disable_ssl=True,
             retry=max_retries,
         )
+        self._node_instance_cache: dict[str, str] = {}
 
         logger.info(f"Initialized Prometheus client at {url}")
 
@@ -51,6 +52,33 @@ class PrometheusClient:
         if container_name:
             selector += f', container="{container_name}"'
         return selector
+
+    def _resolve_node_instance(self, node: str) -> str:
+        """Resolve a Kubernetes node name to the Prometheus node-exporter instance label."""
+        if ":" in node:
+            return node
+
+        cached = self._node_instance_cache.get(node)
+        if cached:
+            return cached
+
+        result = self.query(f'node_uname_info{{nodename="{node}"}}')
+        if result:
+            instance = result[0].get("metric", {}).get("instance")
+            if instance:
+                self._node_instance_cache[node] = instance
+                return instance
+
+        result = self.query(f'kube_node_info{{node="{node}"}}')
+        if result:
+            internal_ip = result[0].get("metric", {}).get("internal_ip")
+            if internal_ip:
+                instance = f"{internal_ip}:9100"
+                self._node_instance_cache[node] = instance
+                return instance
+
+        logger.warning("Could not resolve Prometheus instance for node %s", node)
+        return node
 
     @retry(
         stop=stop_after_attempt(3),
@@ -434,15 +462,16 @@ class PrometheusClient:
         - disk_io_time
         - network_drop_ratio
         """
+        instance = self._resolve_node_instance(node)
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
 
         queries = {
-            "cpu_usage_rate": f'pipeline:node_cpu_usage_rate:5m{{instance="{node}"}}',
-            "load_ratio": f'pipeline:node_load_ratio{{instance="{node}"}}',
-            "memory_available_ratio": f'pipeline:node_memory_available_ratio{{instance="{node}"}}',
-            "disk_io_time": f'pipeline:node_disk_io_time:rate5m{{instance="{node}"}}',
-            "network_drop_ratio": f'pipeline:node_network_drop_ratio{{instance="{node}"}}',
+            "cpu_usage_rate": f'pipeline:node_cpu_usage_rate:5m{{instance="{instance}"}}',
+            "load_ratio": f'pipeline:node_load_ratio{{instance="{instance}"}}',
+            "memory_available_ratio": f'pipeline:node_memory_available_ratio{{instance="{instance}"}}',
+            "disk_io_time": f'pipeline:node_disk_io_time:rate5m{{instance="{instance}"}}',
+            "network_drop_ratio": f'pipeline:node_network_drop_ratio{{instance="{instance}"}}',
         }
 
         metrics = {}
@@ -566,13 +595,14 @@ class PrometheusClient:
         node: str,
         window_minutes: int = 60,
     ) -> dict[str, list[tuple[datetime, float]]]:
+        instance = self._resolve_node_instance(node)
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
         queries = {
-            "node_disk_read_throughput_bytes_per_sec": f'pipeline:node_disk_read_bytes:rate5m{{instance="{node}"}}',
-            "node_disk_write_throughput_bytes_per_sec": f'pipeline:node_disk_written_bytes:rate5m{{instance="{node}"}}',
-            "node_disk_io_time_ratio": f'pipeline:node_disk_io_time:rate5m{{instance="{node}"}}',
-            "node_disk_queue_length": f'pipeline:node_disk_io_queue_length{{instance="{node}"}}',
+            "node_disk_read_throughput_bytes_per_sec": f'pipeline:node_disk_read_bytes:rate5m{{instance="{instance}"}}',
+            "node_disk_write_throughput_bytes_per_sec": f'pipeline:node_disk_written_bytes:rate5m{{instance="{instance}"}}',
+            "node_disk_io_time_ratio": f'pipeline:node_disk_io_time:rate5m{{instance="{instance}"}}',
+            "node_disk_queue_length": f'pipeline:node_disk_io_queue_length{{instance="{instance}"}}',
         }
 
         metrics: dict[str, list[tuple[datetime, float]]] = {}
@@ -592,13 +622,14 @@ class PrometheusClient:
         node: str,
         window_minutes: int = 60,
     ) -> dict[str, list[tuple[datetime, float]]]:
+        instance = self._resolve_node_instance(node)
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
         queries = {
-            "node_network_bytes_in_per_sec": f'pipeline:node_network_receive_bytes:rate5m{{instance="{node}"}}',
-            "node_network_bytes_out_per_sec": f'pipeline:node_network_transmit_bytes:rate5m{{instance="{node}"}}',
-            "node_network_packet_drops_ratio": f'pipeline:node_network_drop_ratio{{instance="{node}"}}',
-            "node_network_errors_ratio": f'pipeline:node_network_error_ratio{{instance="{node}"}}',
+            "node_network_bytes_in_per_sec": f'pipeline:node_network_receive_bytes:rate5m{{instance="{instance}"}}',
+            "node_network_bytes_out_per_sec": f'pipeline:node_network_transmit_bytes:rate5m{{instance="{instance}"}}',
+            "node_network_packet_drops_ratio": f'pipeline:node_network_drop_ratio{{instance="{instance}"}}',
+            "node_network_errors_ratio": f'pipeline:node_network_error_ratio{{instance="{instance}"}}',
         }
 
         metrics: dict[str, list[tuple[datetime, float]]] = {}
@@ -618,14 +649,15 @@ class PrometheusClient:
         node: str,
         window_minutes: int = 60,
     ) -> dict[str, list[tuple[datetime, float]]]:
+        instance = self._resolve_node_instance(node)
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
         queries = {
-            "node_memory_available_bytes": f'node_memory_MemAvailable_bytes{{instance="{node}"}}',
-            "node_memory_free_bytes": f'node_memory_MemFree_bytes{{instance="{node}"}}',
-            "node_memory_cache_bytes": f'node_memory_Cached_bytes{{instance="{node}"}}',
-            "node_memory_buffers_bytes": f'node_memory_Buffers_bytes{{instance="{node}"}}',
-            "node_memory_cache_buffers_bytes": f'(node_memory_Cached_bytes{{instance="{node}"}} + node_memory_Buffers_bytes{{instance="{node}"}})',
+            "node_memory_available_bytes": f'node_memory_MemAvailable_bytes{{instance="{instance}"}}',
+            "node_memory_free_bytes": f'node_memory_MemFree_bytes{{instance="{instance}"}}',
+            "node_memory_cache_bytes": f'node_memory_Cached_bytes{{instance="{instance}"}}',
+            "node_memory_buffers_bytes": f'node_memory_Buffers_bytes{{instance="{instance}"}}',
+            "node_memory_cache_buffers_bytes": f'(node_memory_Cached_bytes{{instance="{instance}"}} + node_memory_Buffers_bytes{{instance="{instance}"}})',
         }
 
         metrics: dict[str, list[tuple[datetime, float]]] = {}
@@ -645,13 +677,14 @@ class PrometheusClient:
         node: str,
         window_minutes: int = 60,
     ) -> dict[str, list[tuple[datetime, float]]]:
+        instance = self._resolve_node_instance(node)
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
         queries = {
-            "node_cpu_usage_mode_user": f'rate(node_cpu_seconds_total{{instance="{node}", mode="user"}}[5m])',
-            "node_cpu_usage_mode_system": f'rate(node_cpu_seconds_total{{instance="{node}", mode="system"}}[5m])',
-            "node_cpu_usage_mode_idle": f'rate(node_cpu_seconds_total{{instance="{node}", mode="idle"}}[5m])',
-            "node_cpu_usage_mode_iowait": f'rate(node_cpu_seconds_total{{instance="{node}", mode="iowait"}}[5m])',
+            "node_cpu_usage_mode_user": f'rate(node_cpu_seconds_total{{instance="{instance}", mode="user"}}[5m])',
+            "node_cpu_usage_mode_system": f'rate(node_cpu_seconds_total{{instance="{instance}", mode="system"}}[5m])',
+            "node_cpu_usage_mode_idle": f'rate(node_cpu_seconds_total{{instance="{instance}", mode="idle"}}[5m])',
+            "node_cpu_usage_mode_iowait": f'rate(node_cpu_seconds_total{{instance="{instance}", mode="iowait"}}[5m])',
         }
         metrics: dict[str, list[tuple[datetime, float]]] = {}
         for name, query in queries.items():
@@ -670,12 +703,13 @@ class PrometheusClient:
         node: str,
         window_minutes: int = 60,
     ) -> dict[str, list[tuple[datetime, float]]]:
+        instance = self._resolve_node_instance(node)
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
         queries = {
-            "node_load_average_1m": f'node_load1{{instance="{node}"}}',
-            "node_load_average_5m": f'node_load5{{instance="{node}"}}',
-            "node_load_average_15m": f'node_load15{{instance="{node}"}}',
+            "node_load_average_1m": f'node_load1{{instance="{instance}"}}',
+            "node_load_average_5m": f'node_load5{{instance="{instance}"}}',
+            "node_load_average_15m": f'node_load15{{instance="{instance}"}}',
         }
         metrics: dict[str, list[tuple[datetime, float]]] = {}
         for name, query in queries.items():
@@ -694,15 +728,16 @@ class PrometheusClient:
         node: str,
         window_minutes: int = 60,
     ) -> dict[str, list[tuple[datetime, float]]]:
+        instance = self._resolve_node_instance(node)
         end = datetime.now()
         start = end - timedelta(minutes=window_minutes)
         queries = {
-            "node_load1": f'node_load1{{instance="{node}"}}',
-            "node_load5": f'node_load5{{instance="{node}"}}',
-            "node_load15": f'node_load15{{instance="{node}"}}',
-            "node_memory_MemAvailable_bytes": f'node_memory_MemAvailable_bytes{{instance="{node}"}}',
-            "node_disk_read_bytes_total": f'rate(node_disk_read_bytes_total{{instance="{node}"}}[5m])',
-            "node_network_transmit_bytes_total": f'rate(node_network_transmit_bytes_total{{instance="{node}"}}[5m])',
+            "node_load1": f'node_load1{{instance="{instance}"}}',
+            "node_load5": f'node_load5{{instance="{instance}"}}',
+            "node_load15": f'node_load15{{instance="{instance}"}}',
+            "node_memory_MemAvailable_bytes": f'node_memory_MemAvailable_bytes{{instance="{instance}"}}',
+            "node_disk_read_bytes_total": f'rate(node_disk_read_bytes_total{{instance="{instance}"}}[5m])',
+            "node_network_transmit_bytes_total": f'rate(node_network_transmit_bytes_total{{instance="{instance}"}}[5m])',
         }
 
         metrics: dict[str, list[tuple[datetime, float]]] = {}
@@ -788,7 +823,8 @@ class PrometheusClient:
         }
 
     async def get_node_cpu_capacity_cores(self, node: str) -> float:
-        query = f'count(count(node_cpu_seconds_total{{instance="{node}"}}) by (cpu))'
+        instance = self._resolve_node_instance(node)
+        query = f'count(count(node_cpu_seconds_total{{instance="{instance}"}}) by (cpu))'
         result = self.query(query)
         if not result:
             return 1.0

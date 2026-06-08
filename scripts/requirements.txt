@@ -38,7 +38,3 @@ tenacity>=8.2.0
 
 # Kubernetes (optional: enables Agent 3 live cluster queries)
 kubernetes>=29.0.0
-
-# LLM (Agent 4 Governance)
-llama-cpp-python>=0.2.0
-groq>=0.4.0

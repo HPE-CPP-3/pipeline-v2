@@ -312,7 +312,8 @@ class WorkloadPredictionAgent:
             logger.debug(f"Raw CSV not found for inference: {csv_file}")
             return None
         try:
-            df = pd.read_csv(csv_file)
+            # Some historical CSVs were written with different schemas; skip malformed lines.
+            df = pd.read_csv(csv_file, on_bad_lines="skip")
             if "timestamp" not in df.columns:
                 if "Unnamed: 0" in df.columns:
                     df = df.rename(columns={"Unnamed: 0": "timestamp"})
@@ -412,7 +413,8 @@ class WorkloadPredictionAgent:
             logger.warning(f"CSV not found: {csv_file}")
             return None
         try:
-            df = pd.read_csv(csv_file)
+            # Some historical CSVs were written with different schemas; skip malformed lines.
+            df = pd.read_csv(csv_file, on_bad_lines="skip")
             # Rename index column back to timestamp if needed
             if "timestamp" not in df.columns and df.index.name == "timestamp":
                 df = df.reset_index()
