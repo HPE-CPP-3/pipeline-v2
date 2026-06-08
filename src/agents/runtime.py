@@ -202,7 +202,7 @@ async def run_pipeline(
     )
 
     try:
-        await pipeline.run(target_config=target_config, window_minutes=60)
+        await pipeline.run(target_config=target_config, window_minutes=180)
     finally:
         await redis_store.close()
         await influx_store.close()
@@ -220,7 +220,7 @@ async def run_ingestion_only(target_config: TargetConfig, prometheus_url: str) -
         csv_store=csv_store,
     )
     try:
-        await ingestion_agent.run_loop(target_config=target_config, window_minutes=60)
+        await ingestion_agent.run_loop(target_config=target_config, window_minutes=180)
     finally:
         await redis_store.close()
         await influx_store.close()

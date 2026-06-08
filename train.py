@@ -135,7 +135,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df["throttle_roll_max_5"] = df["derived_pressure_throttled_ratio"].rolling(5, min_periods=1).max()
     
     # Time features
-    ts = pd.to_datetime(df["timestamp"])
+    ts = pd.to_datetime(df["timestamp"], format="mixed")
     hour = ts.dt.hour + ts.dt.minute / 60
     df["hour_sin"] = np.sin(2 * np.pi * hour / 24)
     df["hour_cos"] = np.cos(2 * np.pi * hour / 24)

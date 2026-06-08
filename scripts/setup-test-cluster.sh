@@ -281,7 +281,7 @@ metadata:
   labels:
     app: stress-test
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: stress-test
@@ -297,14 +297,10 @@ spec:
         args:
           - |
             while true; do
-              # CPU stress for 2 minutes
-              stress --cpu 2 --timeout 120s || true
-              # Rest for 1 minute
-              sleep 60
-              # Memory stress for 2 minutes
-              stress --vm 1 --vm-bytes 256M --timeout 120s || true
-              # Rest for 1 minute
-              sleep 60
+              # Run CPU and Memory stress concurrently for 6 minutes
+              stress --cpu 3 --vm 1 --vm-bytes 420M --timeout 360s || true
+              # Rest for 15 seconds
+              sleep 15
             done
         resources:
           requests:

@@ -55,9 +55,40 @@ class LogIngestionAgent:
     ) -> IngestionResult:
         """Collect raw metrics from Prometheus (no normalisation)."""
         namespace = target_config.namespace
-        pod = target_config.pod_name
         container = target_config.container_name
 
+        # Dynamically resolve active running pod name if target pod is terminated/not running
+        actual_pod = target_config.pod_name
+        try:
+            from kubernetes import client, config
+            try:
+                config.load_incluster_config()
+            except Exception:
+                config.load_kube_config()
+            core_api = client.CoreV1Api()
+            try:
+                pod_status = core_api.read_namespaced_pod_status(name=actual_pod, namespace=namespace)
+                if pod_status.status.phase != "Running":
+                    raise Exception("Not running")
+            except Exception:
+                pods_list = core_api.list_namespaced_pod(namespace=namespace)
+                parts = target_config.pod_name.split("-")
+                if len(parts) > 2:
+                    prefix = "-".join(parts[:-2]) + "-"
+                else:
+                    prefix = target_config.pod_name + "-"
+                running_pods = [
+                    p.metadata.name for p in pods_list.items
+                    if p.metadata.name.startswith(prefix) and p.status.phase == "Running"
+                ]
+                if running_pods:
+                    actual_pod = running_pods[0]
+                    target_config.pod_name = actual_pod
+                    logger.info(f"Dynamically resolved active pod: {actual_pod}")
+        except Exception as e:
+            logger.warning(f"Could not dynamically resolve active pod: {e}")
+
+        pod = actual_pod
         scope = PodScope(pod=pod, namespace=namespace, container=container)
 
         # Note: Different methods have different parameter orders and names!

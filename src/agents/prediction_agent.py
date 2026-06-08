@@ -344,7 +344,10 @@ class WorkloadPredictionAgent:
         self, namespace: str, pod: str, n_rows: int = 90
     ) -> Optional[pd.DataFrame]:
         """Load raw (pre-normalization) CSV for building model input."""
-        csv_file = self.csv_metrics_path / f"{namespace}__{pod}__raw.csv"
+        workload = self._get_workload_name(pod)
+        csv_file = self.csv_metrics_path / f"{namespace}__{workload}__raw.csv"
+        if not csv_file.exists():
+            csv_file = self.csv_metrics_path / f"{namespace}__{pod}__raw.csv"
         if not csv_file.exists():
             logger.debug(f"Raw CSV not found for inference: {csv_file}")
             return None
@@ -360,8 +363,8 @@ class WorkloadPredictionAgent:
                 if col not in metadata_cols:
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
-            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-            df = df.sort_values("timestamp").reset_index(drop=True)
+            df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed", utc=True)
+            df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
             return df.tail(n_rows).reset_index(drop=True)
         except Exception as e:
             logger.error(f"Failed to load raw CSV for inference {csv_file}: {e}")
@@ -449,7 +452,12 @@ class WorkloadPredictionAgent:
     def _load_recent_csv(self, namespace: str, pod: str) -> Optional[pd.DataFrame]:
         """Load the pod's RAW (pre-normalization) metrics CSV for fine-tuning."""
         # Prefer the raw file written by ingestion_agent; fall back to normalized
-        csv_file = self.csv_metrics_path / f"{namespace}__{pod}__raw.csv"
+        workload = self._get_workload_name(pod)
+        csv_file = self.csv_metrics_path / f"{namespace}__{workload}__raw.csv"
+        if not csv_file.exists():
+            csv_file = self.csv_metrics_path / f"{namespace}__{pod}__raw.csv"
+        if not csv_file.exists():
+            csv_file = self.csv_metrics_path / f"{namespace}__{workload}.csv"
         if not csv_file.exists():
             csv_file = self.csv_metrics_path / f"{namespace}__{pod}.csv"
         if not csv_file.exists():
@@ -470,8 +478,8 @@ class WorkloadPredictionAgent:
                 if col not in metadata_cols:
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
-            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-            df = df.sort_values("timestamp").reset_index(drop=True)
+            df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed", utc=True)
+            df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
             n = self._incremental_cfg.finetune_rows
             return df.tail(n).reset_index(drop=True)
         except Exception as e:
@@ -561,7 +569,7 @@ class WorkloadPredictionAgent:
                     columns={"index": "timestamp"}
                 )
             else:
-                df_to_engineer["timestamp"] = pd.to_datetime(df_to_engineer.index)
+                df_to_engineer["timestamp"] = pd.to_datetime(df_to_engineer.index, format="mixed")
 
         try:
             engineered = self._train_mod.engineer_features(df_to_engineer)
@@ -644,3 +652,10 @@ class WorkloadPredictionAgent:
         for h, qmap in forecast.items():
             out[str(h)] = {str(q): float(v) for q, v in qmap.items()}
         return out
+
+    def _get_workload_name(self, pod_name: str) -> str:
+        """Resolve the workload/deployment name by removing pod-specific hashes/suffixes."""
+        parts = pod_name.split("-")
+        if len(parts) > 2:
+            return "-".join(parts[:-2])
+        return pod_name
