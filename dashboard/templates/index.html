@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Dashboard Overview - K8s Sentinel</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            background: "#0D1117",
+            surface: "#161B22",
+            "surface-variant": "#21262D",
+            "on-background": "#C9D1D9",
+            "on-surface": "#C9D1D9",
+            "primary": "#58A6FF",
+            "success": "#3FB950",
+            "warning": "#D29922",
+            "danger": "#F85149"
+          },
+          fontFamily: {
+            sans: ["Inter", "sans-serif"],
+            mono: ["Fira Code", "monospace"]
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #0D1117;
+      color: #C9D1D9;
+      font-family: 'Inter', sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #161B22;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #30363D;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #8B949E;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-[#30363D] bg-surface px-6 py-4 flex items-center justify-between shadow-lg">
+    <div class="flex items-center space-x-3">
+      <span class="material-symbols-outlined text-primary text-3xl animate-pulse">security</span>
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-white flex items-center">
+          K8s Sentinel <span class="ml-2 text-xs bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded font-mono">Pipeline v2</span>
+        </h1>
+        <p class="text-xs text-[#8B949E]">Agentic Telemetry & Auto-Scaling Control Center</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-4">
+      <div id="system-time" class="text-xs font-mono text-[#8B949E]">--:--:--</div>
+      <button onclick="fetchStatus()" class="flex items-center space-x-1 px-3 py-1.5 bg-surface-variant hover:bg-[#30363D] text-sm font-medium rounded-md border border-[#30363D] transition-all">
+        <span class="material-symbols-outlined text-sm">refresh</span>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+    <!-- Left Column: Status Grid & Lock Controls (1/4 space) -->
+    <div class="lg:col-span-1 flex flex-col space-y-6">
+
+      <!-- Infrastructure Status -->
+      <section class="bg-surface border border-[#30363D] rounded-lg p-5 shadow-sm">
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center">
+          <span class="material-symbols-outlined mr-2 text-primary text-lg">dns</span>
+          Infrastructure Status
+        </h2>
+        <div class="space-y-4">
+          <!-- Redis Status -->
+          <div class="flex items-center justify-between border-b border-[#21262D] pb-3">
+            <div>
+              <div class="text-sm font-medium text-white">Redis Store</div>
+              <div class="text-xs text-[#8B949E]">port=6380</div>
+            </div>
+            <span id="status-redis" class="px-2 py-1 text-xs font-semibold rounded-full bg-danger/20 text-danger border border-danger/30">OFFLINE</span>
+          </div>
+
+          <!-- Prometheus Status -->
+          <div class="flex items-center justify-between border-b border-[#21262D] pb-3">
+            <div>
+              <div class="text-sm font-medium text-white">Prometheus Server</div>
+              <div class="text-xs text-[#8B949E]">port=30000</div>
+            </div>
+            <span id="status-prometheus" class="px-2 py-1 text-xs font-semibold rounded-full bg-danger/20 text-danger border border-danger/30">OFFLINE</span>
+          </div>
+
+          <!-- Hosted LLM Status -->
+          <div class="flex items-center justify-between">
+            <div class="w-2/3 truncate">
+              <div class="text-sm font-medium text-white">Hosted LLM</div>
+              <div class="text-xs text-[#8B949E] truncate" title="https://elian-isochimal-kathaleen.ngrok-free.dev">https://elian-isochimal-kathaleen.ngrok-free.dev</div>
+            </div>
+            <span id="status-llm" class="px-2 py-1 text-xs font-semibold rounded-full bg-danger/20 text-danger border border-danger/30">OFFLINE</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Agent Processes -->
+      <section class="bg-surface border border-[#30363D] rounded-lg p-5 shadow-sm">
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center">
+          <span class="material-symbols-outlined mr-2 text-primary text-lg">smart_toy</span>
+          Agent Processes
+        </h2>
+        <div class="space-y-4">
+          <!-- Ingestion & Prediction -->
+          <div class="flex items-center justify-between border-b border-[#21262D] pb-3">
+            <div>
+              <div class="text-sm font-medium text-white">Agent 1 & 2 (Runtime)</div>
+              <div class="text-xs text-[#8B949E]" id="agent12-info">Not running</div>
+            </div>
+            <span id="status-agent12" class="w-3 h-3 rounded-full bg-danger"></span>
+          </div>
+
+          <!-- Optimization -->
+          <div class="flex items-center justify-between border-b border-[#21262D] pb-3">
+            <div>
+              <div class="text-sm font-medium text-white">Agent 3 (Optimization)</div>
+              <div class="text-xs text-[#8B949E]" id="agent3-info">Not running</div>
+            </div>
+            <span id="status-agent3" class="w-3 h-3 rounded-full bg-danger"></span>
+          </div>
+
+          <!-- Governance -->
+          <div class="flex items-center justify-between border-b border-[#21262D] pb-3">
+            <div>
+              <div class="text-sm font-medium text-white">Agent 4 (Governance)</div>
+              <div class="text-xs text-[#8B949E]" id="agent4-info">Not running</div>
+            </div>
+            <span id="status-agent4" class="w-3 h-3 rounded-full bg-danger"></span>
+          </div>
+
+          <!-- Executor -->
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-medium text-white">Agent 5 (Executor)</div>
+              <div class="text-xs text-[#8B949E]" id="agent5-info">Not running</div>
+            </div>
+            <span id="status-agent5" class="w-3 h-3 rounded-full bg-danger"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Redis Locks Control -->
+      <section class="bg-surface border border-[#30363D] rounded-lg p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center">
+            <span class="material-symbols-outlined mr-2 text-warning text-lg">lock</span>
+            Redis Locks
+          </h2>
+          <button onclick="clearAllLocks()" class="text-xs text-[#8B949E] hover:text-danger flex items-center font-semibold">
+            Clear All
+          </button>
+        </div>
+        <div class="space-y-3">
+          <!-- Lock Agent 3 -->
+          <div class="p-3 bg-surface-variant/40 border border-[#30363D] rounded-md flex items-center justify-between">
+            <div class="truncate mr-2">
+              <div class="text-xs font-semibold text-white">Agent 3 Lock</div>
+              <div class="text-[10px] text-[#8B949E] truncate" id="lock-holder-agent3">Status: Unlocked</div>
+            </div>
+            <button id="btn-lock-agent3" onclick="clearLock('agent3')" disabled class="px-2 py-1 text-xs font-semibold rounded bg-[#30363D] text-[#8B949E] cursor-not-allowed border border-[#30363D]">Release</button>
+          </div>
+
+          <!-- Lock Agent 4 -->
+          <div class="p-3 bg-surface-variant/40 border border-[#30363D] rounded-md flex items-center justify-between">
+            <div class="truncate mr-2">
+              <div class="text-xs font-semibold text-white">Agent 4 Lock</div>
+              <div class="text-[10px] text-[#8B949E] truncate" id="lock-holder-agent4">Status: Unlocked</div>
+            </div>
+            <button id="btn-lock-agent4" onclick="clearLock('agent4')" disabled class="px-2 py-1 text-xs font-semibold rounded bg-[#30363D] text-[#8B949E] cursor-not-allowed border border-[#30363D]">Release</button>
+          </div>
+
+          <!-- Lock Agent 5 -->
+          <div class="p-3 bg-surface-variant/40 border border-[#30363D] rounded-md flex items-center justify-between">
+            <div class="truncate mr-2">
+              <div class="text-xs font-semibold text-white">Agent 5 Lock</div>
+              <div class="text-[10px] text-[#8B949E] truncate" id="lock-holder-agent5">Status: Unlocked</div>
+            </div>
+            <button id="btn-lock-agent5" onclick="clearLock('agent5')" disabled class="px-2 py-1 text-xs font-semibold rounded bg-[#30363D] text-[#8B949E] cursor-not-allowed border border-[#30363D]">Release</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Center & Right Columns: Chart & Logs & Streams (3/4 space) -->
+    <div class="lg:col-span-3 flex flex-col space-y-6">
+
+      <!-- Live Stream Events & Telemetry Chart -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- Chart (2/3 width) -->
+        <div class="md:col-span-2 bg-surface border border-[#30363D] rounded-lg p-5 flex flex-col h-80 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center">
+              <span class="material-symbols-outlined mr-2 text-primary text-lg">monitoring</span>
+              Real-time Ingested CPU Telemetry
+            </h2>
+            <span class="text-xs text-[#8B949E] font-mono" id="chart-latest-val">Latest: --%</span>
+          </div>
+          <div class="flex-1 relative">
+            <canvas id="telemetryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Drift & Conf Stats (1/3 width) -->
+        <div class="bg-surface border border-[#30363D] rounded-lg p-5 flex flex-col justify-between shadow-sm h-80">
+          <div>
+            <h2 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center">
+              <span class="material-symbols-outlined mr-2 text-warning text-lg">analytics</span>
+              Decision Telemetry
+            </h2>
+            <div class="space-y-4">
+              <div>
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <span class="text-[#8B949E]">Model Confidence</span>
+                  <span id="conf-val" class="font-mono text-white font-semibold">0.00</span>
+                </div>
+                <div class="w-full bg-[#21262D] rounded-full h-1.5">
+                  <div id="conf-bar" class="bg-primary h-1.5 rounded-full" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <span class="text-[#8B949E]">Feature Drift (EMA)</span>
+                  <span id="drift-val" class="font-mono text-white font-semibold">0.00</span>
+                </div>
+                <div class="w-full bg-[#21262D] rounded-full h-1.5">
+                  <div id="drift-bar" class="bg-warning h-1.5 rounded-full" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 text-center pt-2">
+                <div class="bg-surface-variant/30 border border-[#30363D] p-2 rounded">
+                  <div class="text-[10px] text-[#8B949E] uppercase">Last Recommendation</div>
+                  <div id="last-recommendation" class="text-xs font-bold text-white mt-1">HOLD</div>
+                </div>
+                <div class="bg-surface-variant/30 border border-[#30363D] p-2 rounded">
+                  <div class="text-[10px] text-[#8B949E] uppercase">Governance Decision</div>
+                  <div id="last-gov-decision" class="text-xs font-bold text-white mt-1">N/A</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="text-[10px] text-[#8B949E] border-t border-[#21262D] pt-3">
+            Drift threshold z-score is 3.0. Re-train defaults when confidence &lt; 0.3.
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Logs Console Terminal -->
+      <section class="bg-surface border border-[#30363D] rounded-lg flex flex-col h-96 shadow-sm overflow-hidden">
+        <div class="border-b border-[#30363D] bg-[#161B22] px-4 py-2 flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="material-symbols-outlined text-[#8B949E] text-lg">terminal</span>
+            <span class="text-xs font-bold text-[#8B949E] uppercase tracking-wider">Log Stream Console</span>
+          </div>
+          <div class="flex space-x-1" id="log-tabs">
+            <button onclick="switchLogTab('agent3')" id="tab-agent3" class="px-3 py-1 text-xs font-medium rounded-md border border-[#30363D] bg-surface text-white hover:text-white transition-all">Agent 3</button>
+            <button onclick="switchLogTab('agent4')" id="tab-agent4" class="px-3 py-1 text-xs font-medium rounded-md border border-transparent text-[#8B949E] hover:text-white transition-all">Agent 4</button>
+            <button onclick="switchLogTab('agent5')" id="tab-agent5" class="px-3 py-1 text-xs font-medium rounded-md border border-transparent text-[#8B949E] hover:text-white transition-all">Agent 5</button>
+            <button onclick="switchLogTab('stdout')" id="tab-stdout" class="px-3 py-1 text-xs font-medium rounded-md border border-transparent text-[#8B949E] hover:text-white transition-all">System Out</button>
+          </div>
+        </div>
+        <div class="flex-1 bg-[#090D13] p-4 font-mono text-xs overflow-y-auto custom-scrollbar flex flex-col-reverse" id="log-terminal">
+          <div id="log-content" class="whitespace-pre-wrap text-[#8B949E] leading-relaxed">Loading logs...</div>
+        </div>
+      </section>
+
+      <!-- Redis Stream Pipeline Activity Log -->
+      <section class="bg-surface border border-[#30363D] rounded-lg p-5 shadow-sm flex flex-col h-80">
+        <div class="flex items-center justify-between mb-4 border-b border-[#21262D] pb-3">
+          <h2 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center">
+            <span class="material-symbols-outlined mr-2 text-success text-lg">history</span>
+            Redis Streams Pipeline activity
+          </h2>
+          <div class="flex space-x-2">
+            <select id="stream-selector" onchange="fetchStreamData()" class="bg-surface-variant border border-[#30363D] text-xs text-white rounded px-2 py-1 focus:ring-primary focus:border-primary">
+              <option value="stream:governance:complete">stream:governance:complete (Agent 4)</option>
+              <option value="stream:optimization:complete">stream:optimization:complete (Agent 3)</option>
+              <option value="stream:prediction:complete">stream:prediction:complete (Agent 2)</option>
+              <option value="stream:ingestion:complete">stream:ingestion:complete (Agent 1)</option>
+              <option value="stream:retrain:request">stream:retrain:request (Agent 5)</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto custom-scrollbar" id="stream-activity-list">
+          <div class="text-center text-xs text-[#8B949E] py-8">Select stream to view activities</div>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-4 right-4 bg-surface border border-[#30363D] rounded-lg px-4 py-3 shadow-xl transform translate-y-24 opacity-0 transition-all duration-300 flex items-center space-x-2 z-50">
+    <span id="toast-icon" class="material-symbols-outlined">info</span>
+    <span id="toast-message" class="text-sm font-medium"></span>
+  </div>
+
+  <footer class="border-t border-[#30363D] bg-[#161B22] px-6 py-3 text-center text-xs text-[#8B949E]">
+    K8s Sentinel dashboard connected to local telemetry environment.
+  </footer>
+
+  <script>
+    // System vars
+    let activeLogTab = 'agent3';
+    let telemetryChart = null;
+    let chartDataPoints = [];
+    let chartLabels = [];
+    
+    // Initialize Time
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('system-time').innerText = now.toLocaleTimeString();
+    }, 1000);
+
+    // Toast Function
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-message');
+      const toastIcon = document.getElementById('toast-icon');
+      
+      toastMsg.innerText = message;
+      
+      // Reset classes
+      toastIcon.className = "material-symbols-outlined ";
+      toast.className = "fixed bottom-4 right-4 bg-surface border rounded-lg px-4 py-3 shadow-xl transform transition-all duration-300 flex items-center space-x-2 z-50 ";
+      
+      if (type === 'success') {
+        toast.classList.add('border-success/30', 'text-success');
+        toastIcon.classList.add('text-success');
+        toastIcon.innerText = "check_circle";
+      } else if (type === 'danger') {
+        toast.classList.add('border-danger/30', 'text-danger');
+        toastIcon.classList.add('text-danger');
+        toastIcon.innerText = "error";
+      } else if (type === 'warning') {
+        toast.classList.add('border-warning/30', 'text-warning');
+        toastIcon.classList.add('text-warning');
+        toastIcon.innerText = "warning";
+      } else {
+        toast.classList.add('border-[#30363D]', 'text-primary');
+        toastIcon.classList.add('text-primary');
+        toastIcon.innerText = "info";
+      }
+      
+      // Show
+      toast.classList.remove('translate-y-24', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      setTimeout(() => {
+        toast.classList.add('translate-y-24', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 3000);
+    }
+
+    // Chart Setup
+    function initChart() {
+      const ctx = document.getElementById('telemetryChart').getContext('2d');
+      telemetryChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: 'Ingested CPU Usage %',
+            data: chartDataPoints,
+            borderColor: '#58A6FF',
+            backgroundColor: 'rgba(88, 166, 255, 0.05)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointRadius: 1,
+            pointHoverRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              grid: { color: '#21262D' },
+              ticks: { color: '#8B949E', maxTicksLimit: 8, font: { family: 'Fira Code', size: 10 } }
+            },
+            y: {
+              grid: { color: '#21262D' },
+              ticks: { color: '#8B949E', font: { family: 'Fira Code', size: 10 } },
+              min: 0,
+              max: 100
+            }
+          }
+        }
+      });
+    }
+
+    // Status fetch
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        // Update infrastructure
+        updateStatusBadge('redis', data.redis.online);
+        updateStatusBadge('prometheus', data.prometheus.online);
+        updateStatusBadge('llm', data.llm.online);
+
+        // Update processes
+        updateProcessStatus('agent12', data.agents.agent12);
+        updateProcessStatus('agent3', data.agents.agent3);
+        updateProcessStatus('agent4', data.agents.agent4);
+        updateProcessStatus('agent5', data.agents.agent5);
+
+        // Update locks
+        updateLockStatus('agent3', data.locks.agent3);
+        updateLockStatus('agent4', data.locks.agent4);
+        updateLockStatus('agent5', data.locks.agent5);
+
+        // Update decision telemetry cards from consolidated status response
+        if (data.confidence !== undefined) {
+          const conf = parseFloat(data.confidence);
+          document.getElementById('conf-val').innerText = conf.toFixed(4);
+          document.getElementById('conf-bar').style.width = `${conf * 100}%`;
+        }
+
+        if (data.drift_ratio !== undefined) {
+          const drift = parseFloat(data.drift_ratio);
+          document.getElementById('drift-val').innerText = drift.toFixed(4);
+          // Scale drift to % for bar (drift ratio is 0 to 1 normally)
+          const driftPct = Math.min(drift * 100, 100);
+          document.getElementById('drift-bar').style.width = `${driftPct}%`;
+          const bar = document.getElementById('drift-bar');
+          if (drift > 0.2) { // 20% drift threshold
+            bar.className = "bg-danger h-1.5 rounded-full";
+          } else {
+            bar.className = "bg-warning h-1.5 rounded-full";
+          }
+        }
+
+        if (data.last_recommendation) {
+          const recEl = document.getElementById('last-recommendation');
+          recEl.innerText = data.last_recommendation;
+          if (data.last_recommendation.includes('SCALE_DOWN') || data.last_recommendation.includes('SCALE_UP')) {
+            recEl.className = "text-xs font-bold text-primary mt-1";
+          } else if (data.last_recommendation.includes('RETRAIN')) {
+            recEl.className = "text-xs font-bold text-warning mt-1";
+          } else {
+            recEl.className = "text-xs font-bold text-[#8B949E] mt-1";
+          }
+        }
+
+        if (data.last_governance_decision) {
+          const govEl = document.getElementById('last-gov-decision');
+          govEl.innerText = data.last_governance_decision;
+          if (data.last_governance_decision.includes('APPROVED') || data.last_governance_decision.includes('ESCALATED')) {
+            govEl.className = "text-xs font-bold text-success mt-1";
+          } else if (data.last_governance_decision.includes('REJECTED')) {
+            govEl.className = "text-xs font-bold text-danger mt-1";
+          } else {
+            govEl.className = "text-xs font-bold text-[#8B949E] mt-1";
+          }
+        }
+
+      } catch (err) {
+        console.error("Error fetching status:", err);
+      }
+    }
+
+    function updateStatusBadge(id, online) {
+      const el = document.getElementById(`status-${id}`);
+      if (online) {
+        el.className = "px-2 py-1 text-xs font-semibold rounded-full bg-success/20 text-success border border-success/30";
+        el.innerText = "ONLINE";
+      } else {
+        el.className = "px-2 py-1 text-xs font-semibold rounded-full bg-danger/20 text-danger border border-danger/30";
+        el.innerText = "OFFLINE";
+      }
+    }
+
+    function updateProcessStatus(agent, proc) {
+      const indicator = document.getElementById(`status-${agent}`);
+      const info = document.getElementById(`${agent}-info`);
+      if (proc.running) {
+        indicator.className = "w-3 h-3 rounded-full bg-success";
+        info.innerText = `pid=${proc.pid}`;
+      } else {
+        indicator.className = "w-3 h-3 rounded-full bg-danger";
+        info.innerText = "Not running";
+      }
+    }
+
+    function updateLockStatus(agent, lock) {
+      const holderEl = document.getElementById(`lock-holder-${agent}`);
+      const btn = document.getElementById(`btn-${agent}`);
+      const realBtn = document.getElementById(`btn-lock-${agent}`);
+
+      if (lock.active) {
+        holderEl.innerHTML = `<span class="text-warning font-semibold">Locked by:</span> ${lock.holder}`;
+        realBtn.disabled = false;
+        realBtn.className = "px-2 py-1 text-xs font-semibold rounded bg-warning/20 hover:bg-warning/30 text-warning border border-warning/30 transition-all cursor-pointer";
+      } else {
+        holderEl.innerText = "Status: Unlocked";
+        realBtn.disabled = true;
+        realBtn.className = "px-2 py-1 text-xs font-semibold rounded bg-[#30363D] text-[#8B949E] cursor-not-allowed border border-[#30363D]";
+      }
+    }
+
+    // Clear specific lock
+    async function clearLock(agent) {
+      try {
+        const res = await fetch(`/api/locks/clear/${agent}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast(`Successfully cleared lock for ${agent}`, 'success');
+          fetchStatus();
+        } else {
+          showToast(`Failed to clear lock: ${data.detail || 'unknown error'}`, 'danger');
+        }
+      } catch (err) {
+        showToast(`Error clearing lock: ${err.message}`, 'danger');
+      }
+    }
+
+    // Clear all locks
+    async function clearAllLocks() {
+      try {
+        const res = await fetch('/api/locks/clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast(`Cleared locks: ${data.cleared.join(', ') || 'none'}`, 'success');
+          fetchStatus();
+        }
+      } catch (err) {
+        showToast(`Error clearing locks: ${err.message}`, 'danger');
+      }
+    }
+
+    // Switch Logs tab
+    function switchLogTab(tabName) {
+      activeLogTab = tabName;
+      // Style buttons
+      const tabs = ['agent3', 'agent4', 'agent5', 'stdout'];
+      tabs.forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if (t === tabName) {
+          el.className = "px-3 py-1 text-xs font-medium rounded-md border border-[#30363D] bg-surface text-white hover:text-white transition-all";
+        } else {
+          el.className = "px-3 py-1 text-xs font-medium rounded-md border border-transparent text-[#8B949E] hover:text-white transition-all";
+        }
+      });
+      fetchLogs();
+    }
+
+    // Fetch Logs
+    async function fetchLogs() {
+      try {
+        const res = await fetch(`/api/logs/${activeLogTab}`);
+        const data = await res.json();
+        const contentEl = document.getElementById('log-content');
+        contentEl.innerText = data.content || "No logs output yet.";
+      } catch (err) {
+        console.error("Error fetching logs:", err);
+      }
+    }
+
+    // Fetch Stream Data
+    async function fetchStreamData() {
+      const selector = document.getElementById('stream-selector');
+      const streamName = selector.value;
+      const listEl = document.getElementById('stream-activity-list');
+      
+      try {
+        const res = await fetch(`/api/redis/streams/${streamName}`);
+        const data = await res.json();
+        
+        if (data.messages.length === 0) {
+          listEl.innerHTML = `<div class="text-center text-xs text-[#8B949E] py-8">No messages in stream: ${streamName}</div>`;
+          return;
+        }
+
+        let html = '<div class="space-y-3">';
+        data.messages.forEach(msg => {
+          let fieldHtml = '';
+          for (const [k, v] of Object.entries(msg.fields)) {
+            fieldHtml += `<span class="bg-surface-variant/70 border border-[#30363D] px-2 py-0.5 rounded text-[10px] text-white"><strong class="text-primary">${k}:</strong> ${v}</span> `;
+          }
+
+          html += `
+            <div class="p-3 bg-surface-variant/20 border border-[#30363D] rounded-md text-xs font-mono">
+              <div class="flex items-center justify-between text-[#8B949E] text-[10px] mb-2">
+                <span>ID: ${msg.id}</span>
+                <span class="material-symbols-outlined text-xs">arrow_forward</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5">${fieldHtml}</div>
+            </div>
+          `;
+        });
+        html += '</div>';
+        listEl.innerHTML = html;
+
+      } catch (err) {
+        console.error("Error fetching stream:", err);
+      }
+    }
+
+    // Fetch live CPU telemetry for chart
+    async function updateTelemetryChart() {
+      try {
+        // Read from ingestion:complete stream to populate chart
+        const res = await fetch('/api/redis/streams/stream:ingestion:complete?count=30');
+        const data = await res.json();
+        
+        if (data.messages && data.messages.length > 0) {
+          chartDataPoints = [];
+          chartLabels = [];
+          
+          // Parse in chronological order (reverse the revrange list)
+          const reversedMsg = [...data.messages].reverse();
+          reversedMsg.forEach(msg => {
+            const fields = msg.fields;
+            if (fields.raw_features_json) {
+              try {
+                const rawFeatures = JSON.parse(fields.raw_features_json);
+                let cpuVal = 0.0;
+                if (rawFeatures.derived_usage_vs_limit !== undefined) {
+                  cpuVal = parseFloat(rawFeatures.derived_usage_vs_limit) * 100;
+                } else if (rawFeatures.cpu_usage_rate !== undefined) {
+                  cpuVal = parseFloat(rawFeatures.cpu_usage_rate) * 100;
+                } else if (rawFeatures.container_cpu_usage_seconds_total !== undefined && rawFeatures.kube_pod_container_resource_limits_cpu) {
+                  cpuVal = (parseFloat(rawFeatures.container_cpu_usage_seconds_total) / parseFloat(rawFeatures.kube_pod_container_resource_limits_cpu)) * 100;
+                }
+                
+                chartDataPoints.push(cpuVal);
+                
+                // Format timestamp
+                let timeStr = msg.id.split('-')[0];
+                const date = new Date(parseInt(timeStr));
+                chartLabels.push(date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+              } catch (e) {
+                console.error("Error parsing raw_features_json:", e);
+              }
+            } else if (fields.cpu_usage_rate !== undefined) {
+              const val = parseFloat(fields.cpu_usage_rate) * 100;
+              chartDataPoints.push(val);
+              let timeStr = msg.id.split('-')[0];
+              const date = new Date(parseInt(timeStr));
+              chartLabels.push(date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+            }
+          });
+
+          if (chartDataPoints.length > 0) {
+            const latestVal = chartDataPoints[chartDataPoints.length - 1];
+            document.getElementById('chart-latest-val').innerText = `Latest: ${latestVal.toFixed(2)}%`;
+          }
+
+          telemetryChart.data.labels = chartLabels;
+          telemetryChart.data.datasets[0].data = chartDataPoints;
+          telemetryChart.update();
+        }
+      } catch (err) {
+        console.error("Error updating telemetry chart:", err);
+      }
+    }
+
+    // Auto-update loops
+    window.addEventListener('load', () => {
+      initChart();
+      fetchStatus();
+      fetchLogs();
+      fetchStreamData();
+
+      // Poll status and logs
+      setInterval(fetchStatus, 2000);
+      setInterval(fetchLogs, 2500);
+      setInterval(fetchStreamData, 3000);
+      setInterval(updateTelemetryChart, 4000);
+    });
+  </script>
+</body>
+</html>

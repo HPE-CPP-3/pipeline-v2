@@ -310,6 +310,12 @@ async def run_drift_listener(redis_store: RedisStore, drift_detector: EMADriftDe
 
                 logger.info(f"[Drift] Updated features for {namespace}/{pod_name}. Current drift ratio: {drift_ratio:.1%}")
 
+                # Save drift ratio to Redis for dashboard visibility
+                try:
+                    await redis_store.client.set(f"metrics:drift_ratio:{namespace}:{pod_name}", str(drift_ratio))
+                except Exception as ex:
+                    logger.warning(f"Failed to write drift ratio to Redis: {ex}")
+
                 if drift_detector.should_trigger_retrain(drift_status):
                     logger.warning(
                         f"[Drift] Feature drift detected for {namespace}/{pod_name} (ratio={drift_ratio:.1%}). "

@@ -273,7 +273,7 @@ def main() -> None:
     parser.add_argument("--container", default=None)
     parser.add_argument(
         "--prometheus-url",
-        default=os.getenv("PIPELINE_PROMETHEUS_URL", "http://localhost:9090"),
+        default=os.getenv("PIPELINE_PROMETHEUS_URL", "http://localhost:30000"),
     )
     parser.add_argument(
         "--model-path", default=os.getenv("PIPELINE_MODEL_PATH", "data/models")

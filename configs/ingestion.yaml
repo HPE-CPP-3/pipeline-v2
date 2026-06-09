@@ -1,7 +1,7 @@
 # Prometheus connection
 prometheus:
   # Prometheus server URL
-  url: "http://localhost:9090"
+  url: "http://localhost:30000"
   
   # Query timeout (seconds)
   timeout_seconds: 30
