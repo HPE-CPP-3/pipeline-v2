@@ -184,8 +184,9 @@ class RuleEngine:
         current_replicas  = payload.get("current_replicas", 1)
         recommended       = payload.get("recommended_replicas", current_replicas)
         action            = payload.get("recommended_action", "none")
-        cpu_p90_15m       = float(payload.get("cpu_forecast_p90_15m", 0.0) or 0.0)
-        memory_p90_15m_raw = float(payload.get("memory_forecast_p90_15m", 0.0) or 0.0)
+        # Read from 5-minute horizon keys as requested to minimize scale lag
+        cpu_p90_15m       = float(payload.get("cpu_forecast_p90_5m", 0.0) or 0.0)
+        memory_p90_15m_raw = float(payload.get("memory_forecast_p90_5m", 0.0) or 0.0)
         memory_limit      = float(payload.get("memory_limit", 0.0) or 0.0)
 
         # Memory forecast should normally be a ratio (~0..2). If it's huge, it's likely bytes.
@@ -218,20 +219,37 @@ class RuleEngine:
                     f"(threshold={self.cfg.SCALE_JUMP_AGGRESSIVE_RATIO}x)"
                 )
 
-        # Rule 3 — High CPU pressure (even if memory is okay)
-        if cpu_p90_15m > self.cfg.CPU_FORECAST_HIGH_THRESHOLD:
+        # Rule 3 — High CPU pressure
+        # NOTE: This flag is intentionally SUPPRESSED for scale_up actions.
+        # High CPU is the *reason* to scale up — flagging it would cause the LLM
+        # to reject a valid, self-consistent decision ("don't scale up because CPU is high"
+        # is backwards physics). The flag is only meaningful for scale_down or hold, where
+        # scaling down under high CPU would be dangerous.
+        if cpu_p90_15m > self.cfg.CPU_FORECAST_HIGH_THRESHOLD and action != "scale_up":
             flags.append(FlagReason.HIGH_CPU_RISK)
             logger.info(
                 f"  [FLAG] {FlagReason.HIGH_CPU_RISK}: "
                 f"cpu_p90_15m={cpu_p90_15m:.2f} > threshold={self.cfg.CPU_FORECAST_HIGH_THRESHOLD}"
             )
+        elif cpu_p90_15m > self.cfg.CPU_FORECAST_HIGH_THRESHOLD and action == "scale_up":
+            logger.info(
+                f"  [OK] HIGH_CPU_RISK suppressed for scale_up action "
+                f"(cpu_p90_15m={cpu_p90_15m:.2f}): high CPU confirms scale-up is correct."
+            )
 
-        # Rule 4 — High memory pressure (even if CPU is okay)
-        if memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD:
+        # Rule 4 — High memory pressure
+        # NOTE: Similarly suppressed for scale_up — high memory pressure SUPPORTS the
+        # scale-up recommendation and should not cause LLM re-review.
+        if memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD and action != "scale_up":
             flags.append(FlagReason.HIGH_MEMORY_RISK)
             logger.info(
                 f"  [FLAG] {FlagReason.HIGH_MEMORY_RISK}: "
                 f"memory_p90_15m={memory_p90_15m:.2f} > threshold={self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD}"
+            )
+        elif memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD and action == "scale_up":
+            logger.info(
+                f"  [OK] HIGH_MEMORY_RISK suppressed for scale_up action "
+                f"(memory_p90_15m={memory_p90_15m:.2f}): high memory confirms scale-up is correct."
             )
 
         # Rule 5 — Scale-down with low confidence is dangerous
@@ -270,7 +288,7 @@ class LLMReasoner:
         self,
         api_key: str = None,
         model_type="hosted",
-        local_model_path="data/models/governance_qwen_3b_q4_k_m.gguf",
+        local_model_path="models/governance_qwen_3b_q4_k_m.gguf",
         gemini_model: str | None = None,
         hosted_llm_url: str | None = None,
         hosted_llm_model: str | None = None,
@@ -284,7 +302,7 @@ class LLMReasoner:
             or os.environ.get("HOSTED_LLM_URL")
             or "https://elian-isochimal-kathaleen.ngrok-free.dev"
         ).rstrip("/")
-        self.hosted_llm_model = hosted_llm_model or os.environ.get("HOSTED_LLM_MODEL", "gemma4:31b-cloud")
+        self.hosted_llm_model = hosted_llm_model or os.environ.get("HOSTED_LLM_MODEL", "gemma4:12b")
         self.hosted_llm_api_key = hosted_llm_api_key or os.environ.get("HOSTED_LLM_API_KEY")
         self.client = None
         self.local_llm = None
@@ -311,7 +329,7 @@ class LLMReasoner:
             )
             logger.info(f"Gemini client initialized successfully with model={self.gemini_model}")
         elif self.mode == "hosted":
-            self.hosted_chat_url = f"{self.hosted_llm_url}/v1/chat/completions"
+            self.hosted_chat_url = f"{self.hosted_llm_url}"
             logger.info(
                 f"Hosted LLM initialized with url={self.hosted_chat_url}, "
                 f"model={self.hosted_llm_model}"
@@ -350,21 +368,33 @@ class LLMReasoner:
         current = payload.get('current_replicas', 1)
         recommended = payload.get('recommended_replicas', current)
 
-        return f"""Review this Kubernetes scaling decision:
+        return f"""You are reviewing a Kubernetes autoscaling governance decision.
+
+KEY PRINCIPLE: In Kubernetes, adding more replicas DISTRIBUTES CPU and memory load across more pods.
+Scaling up when CPU or memory is high is ALWAYS the correct response — it reduces per-pod pressure.
+NEVER reject a scale_up action solely because CPU or memory is high.
 
 Target Pod: {payload.get('pod')} (QoS: {payload.get('qos_class', 'Burstable')})
 Proposed Action: {payload.get('recommended_action')}
-Scale Delta: {current} -> {recommended}
+Scale Delta: {current} -> {recommended} replicas
 Model Confidence: {payload.get('confidence')} ({conf_label})
-Resource Pressure: CPU {payload.get('cpu_forecast_p90_15m')} ({cpu_label}), Mem {payload.get('memory_forecast_p90_15m')}
-Flags Raised: {flag_text}
+CPU p90 forecast: {payload.get('cpu_forecast_p90_15m')} ({cpu_label})
+Memory p90 forecast: {payload.get('memory_forecast_p90_15m')}
+Governance Flags: {flag_text}
+
+Your ONLY job is to check for governance concerns:
+- Is the scale jump suspiciously large (e.g. 10x in one step)?
+- Is the model confidence too low to trust this recommendation?
+- Are there signs of a flapping loop (repeated alternating up/down)?
+
+Do NOT reject a scale_up because resource pressure is high — that is the reason to scale up.
 
 STRICT OUTPUT RULES:
 - If you APPROVE: set final_replicas to {recommended}
 - If you REJECT: set final_replicas to {current} (the current safe count — NEVER 0)
 - final_replicas must be a positive integer between 1 and 20
 
-Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas": int, "reasoning": "string"}}"""
+Output JSON only: {{"should_approve": bool, "final_replicas": int, "reasoning": "string"}}"""
 
     def _parse_llm_json(self, res_text: str) -> LLMResponseSchema:
         if "```json" in res_text:
@@ -628,7 +658,8 @@ class GovernanceAgent:
         recommended      = payload.get("recommended_replicas", current_replicas)
 
         # [NEW] CIRCUIT BREAKER 1: The "OOM Panic" Fast-Track
-        memory_p90 = payload.get("memory_forecast_p90_15m", 0.0)
+        # Read from 5-minute horizon to detect memory spike faster
+        memory_p90 = payload.get("memory_forecast_p90_5m", 0.0)
         if memory_p90 > 0.95 and payload.get("recommended_action") == "scale_up":
             logger.warning("CIRCUIT BREAKER: OOM Panic Fast-Track triggered.")
             return GovernanceDecision(
@@ -641,18 +672,34 @@ class GovernanceAgent:
                 timestamp=datetime.now(timezone.utc).isoformat()
             )
 
-        # [NEW] CIRCUIT BREAKER 2: The "Insanity" Hard-Reject
+        # [NEW] CIRCUIT BREAKER 2: Cap at Absolute Maximum Replicas
         if recommended > self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE:
-            logger.warning(f"CIRCUIT BREAKER: Insanity Hard-Reject triggered. {recommended} > {self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}")
-            return GovernanceDecision(
-                outcome=GovernanceOutcome.REJECTED,
-                approved_replicas=current_replicas,
-                flags=[f.value for f in flags] + ["INSANITY_HARD_REJECT"],
-                rule_explanation=f"Requested {recommended} > Absolute Max ({self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}).",
-                llm_reasoning=None,
-                final_explanation="Hard rejected by rule engine due to mathematically impossible recommendation.",
-                timestamp=datetime.now(timezone.utc).isoformat()
+            logger.warning(
+                f"CIRCUIT BREAKER: Cap at Absolute Max triggered. "
+                f"Capping recommendation {recommended} to {self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}"
             )
+            recommended = self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE
+            if current_replicas >= self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE:
+                logger.info("Current replicas is already at absolute max. Maintaining current count.")
+                return GovernanceDecision(
+                    outcome=GovernanceOutcome.APPROVED,
+                    approved_replicas=current_replicas,
+                    flags=[f.value for f in flags],
+                    rule_explanation=f"Already at absolute max ({self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}).",
+                    llm_reasoning=None,
+                    final_explanation="Maintained at absolute max.",
+                    timestamp=datetime.now(timezone.utc).isoformat()
+                )
+            else:
+                return GovernanceDecision(
+                    outcome=GovernanceOutcome.APPROVED_WITH_CAP,
+                    approved_replicas=recommended,
+                    flags=[f.value for f in flags] + ["CAP_TO_MAX_REPLICAS"],
+                    rule_explanation=f"Capped requested {payload.get('recommended_replicas')} to Absolute Max ({self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}).",
+                    llm_reasoning=None,
+                    final_explanation=f"Capped scaling action to absolute maximum of {self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE} replicas.",
+                    timestamp=datetime.now(timezone.utc).isoformat()
+                )
 
         if not flags:
             logger.info("  ✓ No flags raised — decision auto-approved")
@@ -1001,8 +1048,8 @@ def main():
     parser.add_argument(
         "--hosted-llm-model",
         type=str,
-        default=os.environ.get("HOSTED_LLM_MODEL", "gemma4:31b-cloud"),
-        help="Hosted LLM model name (default: $HOSTED_LLM_MODEL or gemma4:31b-cloud)",
+        default=os.environ.get("HOSTED_LLM_MODEL", "gemma4:12b"),
+        help="Hosted LLM model name (default: $HOSTED_LLM_MODEL or gemma4:12b)",
     )
     parser.add_argument(
         "--hosted-llm-api-key",

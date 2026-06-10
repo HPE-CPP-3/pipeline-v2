@@ -188,8 +188,10 @@ class WorkloadPredictionAgent:
         memory_limit: float = raw_limits.get("memory_limit", 0.0)
         current_throttle_ratio: float = raw_limits.get("throttle_ratio", 0.0)
         current_failcnt: int = int(raw_limits.get("memory_failcnt", 0))
+        # Live Prometheus-measured CPU (cores) used as a reality-check below
+        cpu_usage_cores: float = raw_limits.get("cpu_usage_cores", 0.0)
 
-        logger.debug(f"Raw limits: cpu={cpu_limit}, mem={memory_limit}, throttle={current_throttle_ratio}, failcnt={current_failcnt}")
+        logger.debug(f"Raw limits: cpu={cpu_limit}, mem={memory_limit}, throttle={current_throttle_ratio}, failcnt={current_failcnt}, live_cpu={cpu_usage_cores:.4f}")
 
         # Redis latest feature vector
         latest_df = pd.DataFrame([latest_features])
@@ -206,6 +208,39 @@ class WorkloadPredictionAgent:
         # Layer 1: model forward pass — get forecasts AND learned risk logits
         cpu_forecast, throttle_prob = self._safe_predict_all_cpu(model_input)
         memory_forecast, oom_prob = self._safe_predict_all_memory(model_input)
+
+        # ------------------------------------------------------------------
+        # Forecast sanity clamp (idle detection)
+        # ------------------------------------------------------------------
+        # The PatchTST model's context window (60 steps) retains high-CPU
+        # history from stress phases.  If the *actual* Prometheus-measured CPU
+        # is already well below the model's p90 forecast (e.g. the workload
+        # just went idle), the model will keep predicting danger for many
+        # minutes.  We detect this discrepancy and clamp the forecast so the
+        # pipeline can scale down promptly instead of waiting for the model
+        # context to flush.
+        #
+        # Clamp rule: if actual CPU < (p90_5m forecast / 3), replace every
+        # forecast quantile with max(actual_cpu * 1.2, quantile) — giving 20%
+        # headroom above the measured value.  This is conservative: we never
+        # clamp below the measured value, only bring an over-shooting forecast
+        # back in line with reality.
+        if cpu_usage_cores > 0 and cpu_limit > 0:
+            p90_5m = cpu_forecast.get(5, {}).get(0.9, 0.0)
+            clamp_threshold = p90_5m / 3.0   # actual must be <1/3 of forecast to trigger
+            if cpu_usage_cores < clamp_threshold and p90_5m > 0.1:
+                clamp_value = cpu_usage_cores * 1.2  # 20% headroom
+                logger.info(
+                    f"[{namespace}/{pod}] FORECAST CLAMP: actual_cpu={cpu_usage_cores:.3f} "
+                    f"< p90/3={clamp_threshold:.3f} — dampening forecast from p90={p90_5m:.3f} "
+                    f"to clamp={clamp_value:.3f} (idle detected)"
+                )
+                clamped: dict[int, dict[float, float]] = {}
+                for horizon, quantiles in cpu_forecast.items():
+                    clamped[horizon] = {
+                        q: min(v, clamp_value) for q, v in quantiles.items()
+                    }
+                cpu_forecast = clamped
 
         # Layer 2: rule-based calculators enriched with model probabilities
         throttle_risk: dict = {}

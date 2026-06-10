@@ -1,341 +1,301 @@
-# Pipeline V2 - Decoupled Ingestion + Workload Forecasting
+# Pipeline V2 — Agentic Kubernetes Autoscaling
 
-This repo now runs two independent agents connected only through shared state:
+An end-to-end agentic pipeline that ingests live Kubernetes workload metrics, forecasts CPU/memory demand using PatchTST, and autonomously scales deployments through a four-stage decision chain.
 
-1. `LogIngestionAgent` (Stage 1)
-2. `WorkloadPredictionAgent` (Stage 2)
+## Architecture
 
-They communicate through:
+Five agents communicate exclusively through shared state — no direct agent-to-agent calls:
 
-- Redis (latest state + durable stream trigger)
-- InfluxDB (24h+ historical context)
-- CSV files (live append for metrics and predictions)
+```
+Prometheus
+    │
+Agent 1 (Ingestion) ──► stream:ingestion:complete
+                                │
+                         Agent 2 (Prediction) ──► stream:prediction:complete
+                                                          │
+                                                   Agent 3 (Optimization) ──► stream:optimization:complete
+                                                                                        │
+                                                                                 Agent 4 (Governance) ──► stream:governance:complete
+                                                                                                                  │
+                                                                                                           Agent 5 (Executor)
+                                                                                                                  │
+                                                                                                          Kubernetes API
+```
 
-## Stage 1: Plug-and-Play Ingestion
+**Shared state:**
+- **Redis** (`localhost:6380`) — latest feature state, durable stream triggers, single-instance locks, anti-flapping cooldowns
+- **InfluxDB** (`localhost:8086`) — long-term time-series (metrics + predictions)
+- **CSV** (`data/csv/`) — append-only outputs for metrics, predictions, and model fine-tuning
 
-Input discovery uses a simple `target_config`:
+---
 
-- `namespace`
-- `pod_name`
-- `container_name` (optional)
+## Agent Reference
 
-No container URL is required. The agent generates PromQL dynamically using these labels and queries centralized Prometheus.
+### Agent 1 — Ingestion (`src/agents/ingestion_agent.py`)
 
-Execution frequency:
+- Queries Prometheus every **60 seconds** using `namespace` + `pod` + optional `container` labels
+- Collects: CPU usage/throttle, memory working set/failcnt, node load/memory/disk/network, K8s requests/limits
+- Computes derived signals: efficiency (`usage/limit`), pressure (`throttled_time/total_time`), volatility (rolling stddev)
+- Normalizes via rolling min-max
+- Embeds `cpu_usage_cores` (raw Prometheus-measured CPU) into `raw_limits_json` for downstream idle detection
+- Publishes trigger to `stream:ingestion:complete`
 
-- Strict 60-second ticker (`run_loop`)
+**Output streams/stores:** Redis feature state · InfluxDB `metrics` · CSV `data/csv/metrics/` · `stream:ingestion:complete`
 
-Collected feature matrix:
+---
 
-- Container-level:
-  - `container_cpu_usage_seconds_total`
-  - `container_cpu_cfs_throttled_seconds_total`
-  - `container_memory_working_set_bytes`
-  - `container_memory_failures_total`
-- Node-level:
-  - `node_load1`, `node_load5`, `node_load15`
-  - `node_memory_MemAvailable_bytes`
-  - `node_disk_read_bytes_total`
-  - `node_network_transmit_bytes_total`
-- K8s control-plane:
-  - `kube_pod_container_resource_requests`
-  - `kube_pod_container_resource_limits`
-  - `kube_pod_status_phase`
-  - `kube_pod_container_status_restarts_total`
-- Derived signals:
-  - efficiency: `usage / limit`
-  - pressure: `throttled_time / total_time`
-  - volatility: rolling stddev of CPU over 5m and 10m
+### Agent 2 — Prediction (`src/agents/prediction_agent.py`)
 
-Stage 1 output:
+- Wakes up on every `stream:ingestion:complete` event
+- Loads last 90 CSV rows as model context
+- Runs **PatchTST** inference: CPU + memory forecasts at horizons 5, 10, 15 minutes (p50/p70/p90 quantiles)
+- Applies a **forecast sanity clamp** (idle detection): if actual live CPU < p90_forecast / 3, the forecast is dampened to `actual_cpu × 1.2` to prevent model context-lag from trapping the pipeline in scale-up during idle workloads
+- Computes `ThrottleRiskCalculator` (CPU) and `OOMRiskCalculator` (memory): two-layer model + rule hybrid
+- Periodically triggers incremental fine-tuning on recent CSV data (every 60 steps, guarded by 30-min global cooldown)
 
-- Writes normalized features to Redis
-- Writes time-series to InfluxDB
-- Writes live metrics rows to CSV (`data/csv/metrics/...`)
-- Publishes a durable trigger to `stream:ingestion:complete`
+**Risk horizons:** configured to **5-minute** target via `configs/prediction.yaml`
 
-## Stage 2: Workload Prediction
+**Output streams/stores:** `stream:prediction:complete` · InfluxDB `predictions` · CSV `data/csv/predictions/`
 
-This agent is event-driven and wakes up only when Stage 1 writes to Redis stream.
+---
 
-Workflow:
+### Agent 3 — Optimization (`decision_agents/agent3/agent3_optimization.py`)
 
-- Reads latest normalized features from Redis stream payload
-- Fetches last 24 hours from InfluxDB for seasonal context
-- Runs PatchTST inference for CPU and memory
-- Computes confidence based on deviation from historical distribution
-- Writes forecast to:
-  - Redis stream: `stream:prediction:complete`
-  - InfluxDB `predictions` measurement
-  - CSV (`data/csv/predictions/...`)
+Implements a **four-branch decision engine**:
 
-## Web Interface / Observability
+| Branch | Condition | Action |
+|--------|-----------|--------|
+| Branch 3 | `confidence < 0.30` | RETRAIN |
+| Branch 1 | `throttle_risk` or `oom_risk` is HIGH or CRITICAL | SCALE_UP |
+| Branch 2 | both risks LOW **and** `confidence >= scale_down_min_conf` | SCALE_DOWN |
+| Branch 4 | none of the above | HOLD |
 
-Run monitor API:
-# Pipeline V3 — Decoupled Ingestion → Forecasting → Decision Agents
+**QoS-aware thresholds** (auto-detected from live K8s resource spec):
 
-This repository is an agentic pipeline that ingests Kubernetes workload metrics, builds features, forecasts CPU/memory using PatchTST, and then runs downstream decision-making agents.
+| QoS | target_util | scale_down_min_conf | min_replicas |
+|-----|-------------|---------------------|--------------|
+| Guaranteed | 60% | 0.85 | 2 |
+| **Burstable** (default) | **70%** | **0.65** | **1** |
+| BestEffort | 85% | 0.50 | 1 |
 
-The codebase is named “pipeline-v3” (workspace), while the Python package metadata/entrypoint still uses the older name (`pipeline-v2`, `pipeline-agentic`).
+**Scale-down cooldown:** configurable via `SCALE_DOWN_COOLDOWN_SEC` env var (default: `300`).  
+When scaling down with short cooldown for testing, set `SCALE_DOWN_COOLDOWN_SEC=60`.
 
-## Architecture (Agents + Shared State)
+**K8s queries:** live `ready_replicas` from Deployment + container resource spec (30s TTL cache). Falls back gracefully to forecast values if cluster is unreachable.
 
-Agents communicate only through shared state (no direct calls):
+**Output stream:** `stream:optimization:complete` · log: `decision_agents/agent3/agent3_log.txt`
 
-- **Redis**: latest feature state + durable triggers via Redis Streams
-- **InfluxDB**: time-series history (metrics + predictions)
-- **CSV**: append-only outputs for metrics/predictions and model fine-tuning
+---
 
-### Agent 1 — Ingestion (Stage 1)
+### Agent 4 — Governance (`decision_agents/agent4/agent4_governance.py`)
 
-Primary mode:
+The final gate before any action reaches Kubernetes. Implements two circuit breakers + LLM escalation:
 
-- `LogIngestionAgent` queries Prometheus using `namespace`, `pod`, and optional `container` labels.
-- Runs on a strict 60s loop.
+**Circuit breakers (run before LLM):**
+1. **OOM Panic Fast-Track** — immediately approves scale-up if `memory_p90_5m > 95%`
+2. **Absolute Max Cap** — caps any recommendation above `MAX_REPLICAS_ABSOLUTE = 20`. If already at max, returns `APPROVED` (hold). If below max, caps and returns `APPROVED_WITH_CAP`
 
-Outputs:
+**Rule engine flags** (LLM escalation triggers):
+- `LOW_CONFIDENCE` — model confidence below threshold
+- `AGGRESSIVE_SCALE` — replica jump ratio exceeds threshold
+- `HIGH_CPU_RISK` — suppressed for `scale_up` (high CPU is the reason to scale up, not a red flag)
+- `HIGH_MEMORY_RISK` — suppressed for `scale_up` (same rationale)
+- `SCALE_DOWN_RISK` — scale-down with low confidence
 
-- Writes normalized features/state to Redis
-- Writes time-series to InfluxDB
-- Appends rows under `data/csv/metrics/`
-- Publishes trigger events to Redis stream: `stream:ingestion:complete`
+**LLM backends** (select via `--llm-provider`):
+- `local` — local GGUF model via llama-cpp-python (default in production)
+- `gemini` — Google Gemini API (`GEMINI_API_KEY`)
+- `hosted` — OpenAI-compatible endpoint (`HOSTED_LLM_URL`, `HOSTED_LLM_MODEL`)
 
-Optional mode (Prometheus-free):
+**Anti-flapping (Redis cooldown key):** After any approved scaling action, writes `cooldown:<ns>:<deployment>` with 300s TTL. Scale-down requests during this window are rejected with `ANTI_FLAPPING_COOLDOWN`.
 
-- `RedisIngestionBridge` reads raw metrics from `stream:metrics:latest` (or keys) and emits `stream:ingestion:complete`.
+**Output stream:** `stream:governance:complete` · log: `decision_agents/agent4/agent4_log.txt`
 
-### Agent 2 — Prediction (Stage 2)
+---
 
-`WorkloadPredictionAgent` is event-driven:
+### Agent 5 — Executor (`decision_agents/agent5/agent5_executor.py`)
 
-- Wakes up on `stream:ingestion:complete`
-- Pulls history from InfluxDB for context
-- Runs PatchTST inference for CPU + memory
-- Optionally fine-tunes periodically using recent CSV rows
+- Listens on `stream:governance:complete`
+- Executes approved scale-up/scale-down via Kubernetes `patch_namespaced_deployment_scale`
+- Resolves pod names to Deployment names via `OwnerReferences` traversal (with heuristic fallback)
+- Runs a parallel **EMA drift detector** on `stream:ingestion:complete` — publishes retraining requests to `stream:retrain:request` when >20% of features drift beyond 3σ
 
-Outputs:
+**Output:** Kubernetes deployment scaling · `stream:retrain:request` · log: `decision_agents/agent5/agent5_log.txt`
 
-- Publishes to `stream:prediction:complete`
-- Writes predictions to InfluxDB
-- Appends rows under `data/csv/predictions/`
+---
 
-### Agent 3 — Optimization (Decision Agent)
+## Quick Start
 
-- Consumes `stream:prediction:complete`
-- Produces optimization actions/events on `stream:optimization:complete`
-- Logs to `decision_agents/agent3/agent3_log.txt`
-- Enforces a single-instance Redis lock: `lock:agent3:optimization`
-
-### Agent 4 — Governance (Decision Agent)
-
-- Consumes `stream:optimization:complete`
-- Produces governance actions/events on `stream:governance:complete`
-- Logs to `decision_agents/agent4/agent4_log.txt`
-- Enforces a single-instance Redis lock: `lock:agent4:governance`
-- Can optionally use `GROQ_API_KEY` (if provided)
-
-## Install
-
-From the repo root:
+### 1. Install
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-
 pip install -U pip
 pip install -e .
 ```
 
-Notes:
+### 2. Start local state stores
 
-- If you don’t want editable install, you can still run via module mode with `PYTHONPATH="$PWD"` (see below).
+```bash
+bash scripts/setup-local-dev.sh   # starts Redis on :6380 and InfluxDB on :8086
+```
 
-## Run
+### 3. Start or connect a Kubernetes cluster with Prometheus
 
-### Option A (recommended): Start all 4 agents
+```bash
+bash scripts/setup-test-cluster.sh   # brings up a local test cluster
+```
 
-This is the most reliable “one command” runner:
+Prometheus will be available at `http://localhost:30000`.
+
+Deploy the stress workload:
+
+```bash
+kubectl apply -f scripts/stress-test-deployment.yaml
+kubectl get pods -n test-workload
+```
+
+### 4. Run all 5 agents (recommended)
 
 ```bash
 bash scripts/run_all_agents.sh \
   --source prometheus \
-  --namespace <ns> \
-  --pod <pod> \
-  --container <container> \
-  --prometheus-url http://localhost:9090
+  --namespace test-workload \
+  --pod <stress-test-app-pod> \
+  --llm-provider local
 ```
 
-If your Prometheus is exposed via a Kubernetes NodePort (common in local test clusters), pass that URL instead (example):
+With a short scale-down cooldown for testing:
 
 ```bash
-bash scripts/run_all_agents.sh --source prometheus --namespace <ns> --pod <pod> --prometheus-url http://localhost:30000
+SCALE_DOWN_COOLDOWN_SEC=60 bash scripts/run_all_agents.sh \
+  --source prometheus \
+  --namespace test-workload \
+  --pod <stress-test-app-pod> \
+  --llm-provider local
 ```
 
-Prometheus-free mode (Agent 1 reads raw metrics from Redis, then continues 2→3→4):
+### 5. Run agents individually
 
+**Agents 1 + 2 (Ingestion + Prediction):**
 ```bash
-bash scripts/run_all_agents.sh --source redis
-```
-
-### Option B: Run Agents 1 + 2 only
-
-If `pipeline-agentic` is installed:
-
-```bash
-pipeline-agentic \
+python -m src.agents.runtime \
   --agent both \
-  --namespace <ns> \
+  --namespace test-workload \
   --pod <pod> \
-  --container <container> \
-  --prometheus-url http://localhost:9090
+  --prometheus-url http://localhost:30000 \
+  --model-path data/models
 ```
 
-If you hit import issues (or you didn’t install editable), use module mode:
-
-```bash
-PYTHONPATH="$PWD" python -m src.agents.runtime \
-  --agent both \
-  --namespace <ns> \
-  --pod <pod> \
-  --container <container> \
-  --prometheus-url http://localhost:9090
-```
-
-### Option C: Run decision agents (3 + 4) manually
-
-Run from the repo root so log paths resolve correctly:
-
+**Agent 3 (Optimization):**
 ```bash
 python decision_agents/agent3/agent3_optimization.py \
   --mode redis \
   --redis-host localhost \
-  --redis-port 6380 \
-  --log-file decision_agents/agent3/agent3_log.txt
+  --redis-port 6380
+```
 
+**Agent 4 (Governance):**
+```bash
 python decision_agents/agent4/agent4_governance.py \
   --mode redis \
   --redis-host localhost \
   --redis-port 6380 \
-  --log-file decision_agents/agent4/agent4_log.txt
+  --llm-provider local
 ```
 
-If you need to restart Agent 3/4 and they complain about locks:
+**Agent 5 (Executor):**
+```bash
+python decision_agents/agent5/agent5_executor.py \
+  --redis-host localhost \
+  --redis-port 6380
+```
+
+---
+
+## Troubleshooting
+
+### Clear locks after an unclean restart
 
 ```bash
-redis-cli -p 6380 DEL lock:agent3:optimization lock:agent4:governance
+redis-cli -p 6380 DEL lock:agent3:optimization lock:agent4:governance lock:agent5:executor
 ```
 
-## Observe outputs
+### Force-clear anti-flapping cooldown to allow immediate scale-down
 
-### 1) CSV outputs (most visible)
+```bash
+redis-cli -p 6380 DEL cooldown:test-workload:stress-test-app
+```
 
-- Metrics: `data/csv/metrics/*.csv`
-- Predictions: `data/csv/predictions/*.csv`
+### Pipeline stuck in SCALE_UP during idle workload
 
-These are append-only and are the easiest way to confirm the pipeline is producing data.
+This means the model's context window still has recent high-CPU history. The **forecast sanity clamp** in Agent 2 normally resolves this automatically (detects actual CPU < forecast/3 and dampens the forecast). If it persists, check that `cpu_usage_cores` is non-zero in the `raw_limits_json` field in `stream:ingestion:complete`.
 
-### 2) Decision agent logs
+### Agent 4 rejected a valid scale-up
 
+The LLM rejected the decision. Check `agent4_log.txt` for the `LLM Reasoning` block. Since `HIGH_CPU_RISK` is now suppressed for `scale_up` actions, this should only happen if there is also a `LOW_CONFIDENCE` or `AGGRESSIVE_SCALE` flag. If the LLM is still hallucinating backwards physics, consider switching to `--llm-provider gemini`.
+
+### Lock held by crashed process
+
+```bash
+redis-cli -p 6380 GET lock:agent3:optimization   # see who holds it
+redis-cli -p 6380 DEL lock:agent3:optimization   # force-release
+```
+
+---
+
+## Observe Outputs
+
+### Decision agent logs
 ```bash
 tail -f decision_agents/agent3/agent3_log.txt
 tail -f decision_agents/agent4/agent4_log.txt
+tail -f decision_agents/agent5/agent5_log.txt
 ```
 
-### 3) InfluxDB (long-term storage)
-
-If InfluxDB is enabled/configured, the pipeline writes to these measurements in the configured bucket (default bucket: `metrics`):
-
-- `metrics` (telemetry)
-- `predictions` (forecasts + confidence)
-- `decisions` (optimization/governance actions)
-- `feedback` (predicted vs actual; used for performance metrics)
-
-### 4) Redis stream flow (debugging)
-
-Pipeline event streams:
-
-- `stream:ingestion:complete` (Agent 1 → Agent 2)
-- `stream:prediction:complete` (Agent 2 → Agent 3)
-- `stream:optimization:complete` (Agent 3 → Agent 4)
-- `stream:governance:complete` (Agent 4 output)
-
-### 5) Web monitor API
-
-Run:
-
+### Redis stream inspection
 ```bash
-uvicorn src.agents.monitor_api:app --host 0.0.0.0 --port 8010
+redis-cli -p 6380 XREVRANGE stream:prediction:complete + - COUNT 1
+redis-cli -p 6380 XREVRANGE stream:optimization:complete + - COUNT 1
+redis-cli -p 6380 XREVRANGE stream:governance:complete + - COUNT 1
 ```
 
-Then open:
-Open:
+### CSV outputs
+```
+data/csv/metrics/     — raw + normalized ingestion rows
+data/csv/predictions/ — PatchTST forecast rows
+```
 
-- `http://localhost:8010/` (simple web page)
-- `http://localhost:8010/health`
-- `http://localhost:8010/status?namespace=<ns>&pod=<pod>`
-- `http://localhost:8010/model/performance?namespace=<ns>&pod=<pod>`
-- `http://localhost:8010/csv/status?namespace=<ns>&pod=<pod>`
-
-Model clarity:
-
-- If no saved model exists in `data/models`, runtime uses a fresh PatchTST init.
-- `model/performance` reports:
-  - latest model metadata (if present)
-  - `NRMSE` (24h)
-  - `bias` (24h)
-
-## Running
-
-Install:
-
+### Dashboard (K8s Sentinel)
 ```bash
-pip install -e .
+uvicorn dashboard.main:app --host 0.0.0.0 --port 8000 --reload
+# Open http://localhost:8000
 ```
 
-Run both agents together:
+---
 
-```bash
-pipeline-agentic \
-  --namespace <namespace> \
-  --pod <pod-name> \
-  --container <container-name> \
-  --prometheus-url http://localhost:9090
-```
+## Configuration
 
-Important local default for your dev setup:
+| Variable | Default | Description |
+|---|---|---|
+| `PIPELINE_REDIS_HOST` | `localhost` | Redis host |
+| `PIPELINE_REDIS_PORT` | `6380` | Redis port |
+| `INFLUXDB_URL` | `http://localhost:8086` | InfluxDB URL |
+| `INFLUXDB_ORG` | `pipeline-v2` | InfluxDB org |
+| `INFLUXDB_BUCKET` | `metrics` | InfluxDB bucket |
+| `PIPELINE_PROMETHEUS_URL` | `http://localhost:30000` | Prometheus URL |
+| `SCALE_DOWN_COOLDOWN_SEC` | `300` | Agent 3 scale-down cooldown (seconds) |
+| `GEMINI_API_KEY` | — | Gemini API key (for `--llm-provider gemini`) |
+| `HOSTED_LLM_URL` | — | Hosted OpenAI-compatible endpoint |
+| `HOSTED_LLM_MODEL` | `gemma4:12b` | Hosted LLM model name |
 
-- Redis container is mapped to host port `6380`
-- Set `PIPELINE_REDIS_PORT=6380` (or pass as env before run)
+Risk calculation thresholds: `configs/prediction.yaml`
 
-Run ingestion only:
-
-```bash
-pipeline-agentic --agent ingestion --namespace <namespace> --pod <pod-name>
-```
-
-Run prediction only:
-
-```bash
-pipeline-agentic \
-  --agent prediction \
-  --namespace dummy \
-  --pod dummy
-```
-
-## Test Environment
-
-- Cluster setup: `docs/CLUSTER_SETUP.md`
-- Full quickstart: `docs/QUICKSTART.md`
-## Configuration (defaults)
-
-- Redis: `PIPELINE_REDIS_HOST` (default `localhost`), `PIPELINE_REDIS_PORT` (default `6380`)
-- InfluxDB: `INFLUXDB_URL` (default `http://localhost:8086`), `INFLUXDB_ORG` (default `pipeline-v2`), `INFLUXDB_BUCKET` (default `metrics`)
-- CSV base path: `PIPELINE_CSV_PATH` (default `data/csv`)
-- Prometheus URL: `PIPELINE_PROMETHEUS_URL` (default `http://localhost:9090`)
+---
 
 ## Docs
 
 - Cluster setup: `docs/CLUSTER_SETUP.md`
 - Quickstart: `docs/QUICKSTART.md`
 - Implementation summary: `docs/IMPLEMENTATION_SUMMARY.md`
-- Project report: `docs/PROJECT_REPORT.md` (PDF: `docs/project_report.pdf`)

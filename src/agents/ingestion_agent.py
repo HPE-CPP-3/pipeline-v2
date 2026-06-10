@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # These are present in raw_df BEFORE rolling-minmax normalisation destroys them.
 _CPU_LIMIT_COL = "kube_pod_container_resource_limits_cpu"
 _MEM_LIMIT_COL = "kube_pod_container_resource_limits_memory"
+_CPU_USAGE_COL = "container_cpu_usage_seconds_total"   # actual measured CPU (cores)
 _THROTTLE_RATIO_COL = "derived_pressure_throttled_ratio"
 _MEM_FAIL_COL = "container_memory_failcnt"
 
@@ -68,8 +69,8 @@ class LogIngestionAgent:
             core_api = client.CoreV1Api()
             try:
                 pod_status = core_api.read_namespaced_pod_status(name=actual_pod, namespace=namespace)
-                if pod_status.status.phase != "Running":
-                    raise Exception("Not running")
+                if pod_status.status.phase != "Running" or pod_status.metadata.deletion_timestamp is not None:
+                    raise Exception("Not running or terminating")
             except Exception:
                 pods_list = core_api.list_namespaced_pod(namespace=namespace)
                 parts = target_config.pod_name.split("-")
@@ -79,7 +80,9 @@ class LogIngestionAgent:
                     prefix = target_config.pod_name + "-"
                 running_pods = [
                     p.metadata.name for p in pods_list.items
-                    if p.metadata.name.startswith(prefix) and p.status.phase == "Running"
+                    if p.metadata.name.startswith(prefix) 
+                    and p.status.phase == "Running"
+                    and p.metadata.deletion_timestamp is None
                 ]
                 if running_pods:
                     actual_pod = running_pods[0]
@@ -338,8 +341,13 @@ class LogIngestionAgent:
 
 def _extract_raw_limits(raw_df: pd.DataFrame) -> dict:
     """
-    Pull the last known raw (pre-normalization) values for resource limits
-    and current throttle ratio out of raw_df.
+    Pull the last known raw (pre-normalization) values for resource limits,
+    current throttle ratio, and the actual live CPU usage rate out of raw_df.
+
+    cpu_usage_cores is the most recent measured CPU (in cores) from Prometheus.
+    The prediction agent uses this as a reality-check sanity clamp against the
+    model's forward forecast: if the measured CPU is much lower than what the
+    model predicts, the forecast is over-optimistic and should be dampened.
     """
     def _last(col: str, default: float = 0.0) -> float:
         if col in raw_df.columns:
@@ -362,4 +370,5 @@ def _extract_raw_limits(raw_df: pd.DataFrame) -> dict:
         "memory_limit": _last(_MEM_LIMIT_COL, 0.0),
         "throttle_ratio": _last(_THROTTLE_RATIO_COL, 0.0),
         "memory_failcnt": _last(_MEM_FAIL_COL, 0.0),
+        "cpu_usage_cores": _last(_CPU_USAGE_COL, 0.0),  # live measured CPU
     }

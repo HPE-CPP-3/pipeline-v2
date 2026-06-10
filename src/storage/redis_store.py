@@ -193,6 +193,9 @@ class RedisStore:
             )
         except (redis.exceptions.TimeoutError, TimeoutError):
             return []
+        except (redis.exceptions.ConnectionError, ConnectionError) as e:
+            logger.warning(f"Redis connection issue during xread on {stream_name}: {e}")
+            return []
 
         out: list[tuple[str, dict[str, Any]]] = []
         for _, items in messages:

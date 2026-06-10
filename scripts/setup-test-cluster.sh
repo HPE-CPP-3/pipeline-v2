@@ -272,62 +272,7 @@ echo -e "${YELLOW}Step 5: Deploying sample workload to generate metrics...${NC}"
 kubectl create namespace test-workload --dry-run=client -o yaml | kubectl apply -f -
 
 # Deploy a sample application that generates variable CPU/memory load
-kubectl apply -f - <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: stress-test-app
-  namespace: test-workload
-  labels:
-    app: stress-test
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: stress-test
-  template:
-    metadata:
-      labels:
-        app: stress-test
-    spec:
-      containers:
-      - name: stress-container
-        image: polinux/stress:latest
-        command: ["sh", "-c"]
-        args:
-          - |
-            while true; do
-              # Run CPU and Memory stress concurrently for 6 minutes
-              stress --cpu 3 --vm 1 --vm-bytes 420M --timeout 360s || true
-              # Rest for 15 seconds
-              sleep 15
-            done
-        resources:
-          requests:
-            cpu: "0.5"
-            memory: "256Mi"
-          limits:
-            cpu: "2.0"
-            memory: "512Mi"
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: stress-test-service
-  namespace: test-workload
-spec:
-  selector:
-    app: stress-test
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 80
-EOF
+kubectl apply -f "$(dirname "$0")/stress-test-deployment.yaml"
 
 echo -e "${GREEN}✓ Sample workload deployed${NC}"
 

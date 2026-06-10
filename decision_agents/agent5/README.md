@@ -1,12 +1,14 @@
 # Agent 5: Governance Scaling Actuator and Drift Monitor
 
 ## 1. Overview & Role in the Pipeline
-Agent 5 (the **Actuator**) acts as the execution and monitoring terminal of the closed-loop automation pipeline. It bridges the gap between decision intelligence (optimization/governance) and physical infrastructure (Kubernetes workload deployment), while simultaneously monitoring live ingestion data for statistical anomalies (feature drift).
+
+Agent 5 is the execution and monitoring terminal of the closed-loop automation pipeline. It bridges the gap between Agent 4's approved governance decisions and the live Kubernetes cluster, while simultaneously monitoring ingested features for statistical drift.
 
 ### Key Responsibilities
-1. **Actuation**: Listens asynchronously to approved decisions on `stream:governance:complete` and scales target Kubernetes deployments.
-2. **Drift Detection**: Analyzes live feature metrics published to `stream:ingestion:complete` using an Exponential Moving Average (EMA) detector. If features drift beyond configured thresholds, it triggers a model retraining event on `stream:retrain:request`.
-3. **Locking & Single-Instance Safety**: Employs Redis-based locking to prevent distributed agent conflicts.
+
+1. **Actuation** — Listens on `stream:governance:complete` and scales Kubernetes Deployments when an action is approved
+2. **Drift Detection** — Monitors `stream:ingestion:complete` with an EMA detector; publishes retraining requests to `stream:retrain:request` when >20% of features drift beyond threshold
+3. **Single-Instance Safety** — Redis-based lock (`lock:agent5:executor`, 30s TTL) prevents duplicate execution
 
 ---
 
@@ -14,119 +16,114 @@ Agent 5 (the **Actuator**) acts as the execution and monitoring terminal of the 
 
 ```mermaid
 graph TD
-    %% Subscribing to Redis Streams
     StreamGov[stream:governance:complete] -.->|Async Listen| Agent5[Agent 5: Actuator]
     StreamIngest[stream:ingestion:complete] -.->|Async Listen| Agent5
-    
-    %% Scaling Path
-    Agent5 -->|1. Resolve Deployment| K8sAPI[Kubernetes API]
-    Agent5 -->|2. Exec patch scale| K8sAPI
-    
-    %% Drift Path
-    Agent5 -->|3. EMADriftDetector| DriftCheck{Drift Ratio > Threshold?}
+
+    Agent5 -->|1. Resolve pod → Deployment| K8sAPI[Kubernetes API]
+    Agent5 -->|2. patch_namespaced_deployment_scale| K8sAPI
+
+    Agent5 -->|3. EMADriftDetector| DriftCheck{Drift ratio > threshold?}
     DriftCheck -->|Yes| StreamRetrain[stream:retrain:request]
-    
-    %% Lock refresher
-    Agent5 -->|Periodic Refresh| LockKey[lock:agent5:executor]
+
+    Agent5 -->|Periodic lock refresh| LockKey[lock:agent5:executor]
 ```
 
 ---
 
-## 3. Detailed Component Reference
+## 3. Component Reference
 
 ### `K8sExecutor`
-The core engine for interacting with the Kubernetes Cluster.
-* **`resolve_deployment_name(pod_name, namespace)`**:
-  * Resolves dynamic pod IDs (e.g., `stress-test-app-7758b96bd8-m86mg`) to their parent Deployment name (e.g., `stress-test-app`).
-  * Queries the live Kubernetes API to traverse `OwnerReferences` recursively (Pod $\rightarrow$ ReplicaSet $\rightarrow$ Deployment).
-  * If owner resolution fails, it falls back to a suffix-stripping heuristic.
-* **`scale_deployment(deployment_name, namespace, replicas)`**:
-  * Utilizes the `kubernetes` library to call `patch_namespaced_deployment_scale` on the target workload.
-  * Ensures that live Kubernetes replicas align precisely with approved governance recommendations.
 
-### `_RedisSingleInstanceLock`
-Ensures thread and process safety across distributed nodes.
-* **`acquire_or_exit()`**: Sets a unique key (`lock:agent5:executor`) in Redis with a time-to-live (TTL) of 30 seconds. Exits the process if the lock is held by another host/PID.
-* **`refresh()`**: Periodically extends the lock lease TTL to prevent premature release during long-running streaming loops.
+- **`resolve_deployment_name(pod_name, namespace)`**: Traverses `OwnerReferences` (Pod → ReplicaSet → Deployment). Falls back to heuristic suffix-stripping if traversal fails.
+- **`scale_deployment(deployment_name, namespace, replicas)`**: Calls `patch_namespaced_deployment_scale` with the approved replica count.
 
-### Async Listeners
-* **`run_governance_listener()`**:
-  * Continuously reads from `stream:governance:complete`.
-  * Filters for approved outcomes (e.g., `APPROVED` or `ESCALATED_TO_LLM` where the approval flag is `True`).
-  * Initiates K8s scaling via `K8sExecutor`.
-* **`run_drift_listener()`**:
-  * Reads feature updates from `stream:ingestion:complete`.
-  * Computes drift status against historical distribution profiles using `EMADriftDetector`.
-  * If the drift ratio (drifting features divided by total features) exceeds the configured `feature_ratio` threshold, it publishes a retraining request payload to `stream:retrain:request`.
+### Governance Listener (`run_governance_listener`)
+
+- Reads from `stream:governance:complete`
+- Filters for approved outcomes: `APPROVED`, `APPROVED_WITH_CAP`, `ESCALATED_TO_LLM` with `approved=True`
+- Calls `K8sExecutor.scale_deployment()`
+- Logs all decisions (both approved and rejected)
+
+### Drift Listener (`run_drift_listener`)
+
+- Reads from `stream:ingestion:complete`
+- Runs `EMADriftDetector` on the feature vector
+- If drift ratio (drifting features / total features) > `feature_ratio` threshold → publishes retraining request to `stream:retrain:request`
+- Agent 2 listens for these requests and triggers incremental fine-tuning
 
 ---
 
-## 4. Configuration Parameters
-Agent 5 loads configuration from `configs/training.yaml` for tuning feature drift parameters:
+## 4. Configuration
+
+From `configs/training.yaml`:
+
 ```yaml
 drift_detection:
-  alpha: 0.1             # Smoothing factor for EMA calculation
-  z_threshold: 3.0       # Standard deviations to flag a feature as drifted
-  feature_ratio: 0.2     # Percentage of total features that must drift to trigger retraining (20%)
+  alpha: 0.1          # EMA smoothing factor
+  z_threshold: 3.0    # standard deviations to flag a feature as drifted
+  feature_ratio: 0.2  # 20% of features must drift to trigger retraining
 ```
 
 ---
 
-## 5. Live E2E Verification Logs
+## 5. CLI Usage
 
-### Scenario A: Feature Drift Detection & Retraining Feedback Loop
-During live metrics ingestion, a drift ratio of **57.9%** (11 out of 19 features drifting) was observed:
-```log
-16:39:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 57.9%
-16:39:51 [INFO] Drift trigger #1: 11/19 features drifting (57.9%)
-16:39:51 [WARNING] [Drift] Feature drift detected (ratio=57.9%). Publishing retraining request.
-```
-Agent 2 captured this message from `stream:retrain:request`, executed 5 epochs of fine-tuning, and updated the model checkpoint:
-```log
-2026-06-08 16:39:55,435 INFO  src.training.incremental_trainer  Fine-tuning for 5 epochs...
-2026-06-08 16:39:59,151 INFO  src.training.incremental_trainer  Fine-tune complete in 3.7s
-2026-06-08 16:39:59,160 INFO  src.training.incremental_trainer  Checkpoint updated at data/models/patchtst_multi.pt
-2026-06-08 16:39:59,161 INFO  src.agents.prediction_agent       Fine-tune #day=1 complete. Weights hot-reloaded.
-```
-Upon the next ingestion check, the drift ratio returned to **0.0%**:
-```log
-16:40:51 [INFO] [Drift] Updated features for test-workload/stress-test-app-7758b96bd8-m86mg. Current drift ratio: 0.0%
-```
-
-### Scenario B: Kubernetes Scale-Up Actuation
-A simulated scale-up decision targeting **3 replicas** was approved by Governance and handled by Agent 5:
-```log
-16:42:00 [INFO] --- Received Governance Decision 1780917120897-0 ---
-16:42:00 [INFO] Decision: outcome=GovernanceOutcome.ESCALATED_TO_LLM | action=scale_up | replicas=3
-16:42:00 [INFO] [K8s] Resolved pod stress-test-app-7758b96bd8-m86mg to Deployment stress-test-app
-16:42:00 [INFO] [K8s] Successfully scaled deployment test-workload/stress-test-app to 3 replicas.
-```
-Validation via `kubectl`:
 ```bash
-$ kubectl get deployment -n test-workload stress-test-app
-NAME              READY   UP-TO-DATE   AVAILABLE   AGE
-stress-test-app   3/3     3            3           134m
+python decision_agents/agent5/agent5_executor.py \
+  --redis-host localhost \
+  --redis-port 6380
 ```
 
-### Scenario C: Flapping Prevention (Governance-Level Intercept)
-A scale-down request published within the 5-minute cooldown window was rejected:
+The executor auto-detects the K8s environment (in-cluster ServiceAccount or `~/.kube/config` for local dev).
+
+---
+
+## 6. Live Verification Examples
+
+### Scale-Up Actuation
+
 ```log
-16:42:10 [INFO] --- Received Governance Decision 1780917130515-0 ---
-16:42:10 [INFO] Decision: outcome=GovernanceOutcome.REJECTED | action=scale_down | replicas=3
-16:42:10 [INFO] Governance decision rejected or hold. No scaling action executed.
+12:43:07 [INFO] --- Received Governance Decision 1781071987943-0 ---
+12:43:07 [INFO] Decision details: outcome=APPROVED (approved=True) | action=scale_up | replicas=5 | target=test-workload/stress-test-app-9bcfc7b54-4wrrp
+12:43:07 [INFO] [K8s] Resolved pod stress-test-app-9bcfc7b54-4wrrp to Deployment stress-test-app
+12:43:07 [INFO] [K8s] Successfully scaled deployment test-workload/stress-test-app to 5 replicas.
 ```
 
-### Scenario D: Kubernetes Scale-Down Actuation
-Once the anti-flapping lease was cleared, the scale-down request was approved and executed successfully:
+### Scale-Down Actuation (after idle detection)
+
 ```log
-16:42:22 [INFO] --- Received Governance Decision 1780917142223-0 ---
-16:42:22 [INFO] Decision: outcome=GovernanceOutcome.APPROVED | action=scale_down | replicas=1
-16:42:22 [INFO] [K8s] Resolved pod stress-test-app-7758b96bd8-m86mg to Deployment stress-test-app
-16:42:22 [INFO] [K8s] Successfully scaled deployment test-workload/stress-test-app to 1 replicas.
+12:43:07 [INFO] Decision details: outcome=APPROVED (approved=True) | action=scale_down | replicas=1 | target=test-workload/...
+12:43:07 [INFO] [K8s] Successfully scaled deployment test-workload/stress-test-app to 1 replicas.
 ```
-Validation via `kubectl`:
-```bash
-$ kubectl get deployment -n test-workload stress-test-app
-NAME              READY   UP-TO-DATE   AVAILABLE   AGE
-stress-test-app   1/1     1            1           134m
+
+### Anti-Flapping Rejection (from Agent 4)
+
+```log
+[WARNING] Anti-flapping triggered. Rejecting scale-down during cooldown window.
+[INFO] Governance decision rejected or hold. No scaling action executed.
 ```
+
+### Feature Drift → Retraining
+
+```log
+[Drift] Updated features for test-workload/stress-test-app. Current drift ratio: 57.9%
+[WARNING] [Drift] Feature drift detected (ratio=57.9%). Publishing retraining request.
+```
+
+Agent 2 then fine-tunes and hot-reloads:
+
+```log
+Fine-tuning for 5 epochs...
+Fine-tune complete in 3.7s
+Checkpoint updated at data/models/patchtst_multi.pt
+Fine-tune #day=1 complete. Weights hot-reloaded.
+```
+
+---
+
+## 7. Output
+
+- Kubernetes deployment scale operations (live cluster)
+- `stream:retrain:request` — triggers Agent 2 incremental fine-tuning
+- Logs: `decision_agents/agent5/agent5_log.txt`
+- Single-instance lock: `lock:agent5:executor`

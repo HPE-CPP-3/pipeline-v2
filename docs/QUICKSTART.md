@@ -1,148 +1,181 @@
-# Quickstart: Two Independent Agents
+# Quickstart
 
-This quickstart runs Stage 1 (ingestion) and Stage 2 (prediction) as independent services.
+## Prerequisites
 
-## 1) Start local state stores
+- Kubernetes cluster with Prometheus (NodePort on `:30000`)
+- Redis on `localhost:6380` and InfluxDB on `localhost:8086`
+- Python 3.10+ with the repo installed (`pip install -e .`)
+
+---
+
+## 1. Start local state stores
 
 ```bash
-cd pipeline-v3
-./scripts/setup-local-dev.sh
+bash scripts/setup-local-dev.sh
 ```
 
-This brings up:
+Starts Redis on `:6380` and InfluxDB on `:8086`.
 
-- Redis (`localhost:6380`)
-- InfluxDB (`localhost:8086`)
+---
 
-## 2) Start or connect a Kubernetes cluster with Prometheus
-
-If you don't have Prometheus handy, you can skip this and run the Prometheus-free
-Redis ingestion bridge (see the section "Alternative: Prometheus-free Stage 1").
-
-If you want a local test cluster:
+## 2. Start a test Kubernetes cluster
 
 ```bash
-./scripts/setup-test-cluster.sh
+bash scripts/setup-test-cluster.sh
 ```
 
 Prometheus will be available at `http://localhost:30000`.
 
-## 3) Pick a target pod
+---
+
+## 3. Deploy the stress test workload
 
 ```bash
+kubectl apply -f scripts/stress-test-deployment.yaml
 kubectl get pods -n test-workload
 ```
 
-Use one `stress-test-app-*` pod as your plug-and-play target.
+The workload cycles through:
+- **Low load** — `stress --cpu 1` for 120s
+- **High load** — `stress --cpu 4` for 60s
+- **Low load** — `stress --cpu 1` for 60s
+- **Idle** — `sleep 600`
 
-## 4) Run Stage 1 (Ingestion) only
+Resources: `requests cpu=0.5 / memory=256Mi`, `limits cpu=2.0 / memory=512Mi` (QoS: Burstable)
+
+---
+
+## 4. Run all agents (recommended)
 
 ```bash
-pipeline-agentic \
-  --agent ingestion \
+bash scripts/run_all_agents.sh \
+  --source prometheus \
   --namespace test-workload \
-  --pod <stress-test-app-pod> \
-  --container stress-container \
-  --prometheus-url http://localhost:30000
+  --pod <stress-test-app-xxxxxx-xxxxx> \
+  --llm-provider local
 ```
 
-Behavior:
-
-- Runs every 60 seconds
-- Collects + normalizes + writes to Redis/InfluxDB/CSV
-- Emits `stream:ingestion:complete`
-
-## Alternative: Prometheus-free Stage 1 (read from Redis)
-
-Stage 1 can also be driven directly from Redis (no Prometheus).
-
-1) Start the bridge (reads `stream:metrics:latest`, writes `stream:ingestion:complete`):
+**With a shorter scale-down cooldown for faster testing:**
 
 ```bash
-pipeline-agentic \
-  --agent redis-ingestion \
-  --redis-input-mode stream \
-  --redis-input-stream stream:metrics:latest \
-  --redis-output-stream stream:ingestion:complete \
-  --redis-start-id '$' \
-  --cpu-limit 1.0 \
-  --memory-limit 536870912
+SCALE_DOWN_COOLDOWN_SEC=60 bash scripts/run_all_agents.sh \
+  --source prometheus \
+  --namespace test-workload \
+  --pod <stress-test-app-xxxxxx-xxxxx> \
+  --llm-provider local
 ```
 
-2) Publish a sample upstream event into `stream:metrics:latest`.
-The bridge will pass through `features_json` and `raw_limits_json` if they are present:
+The script launches all five agents and prints the stream flow:
+
+```
+stream:ingestion:complete    <-- Agent 1 writes here
+stream:prediction:complete   <-- Agent 2 writes here
+stream:optimization:complete <-- Agent 3 writes here
+stream:governance:complete   <-- Agent 4 writes here
+stream:retrain:request       <-- Agent 5 writes retraining requests here
+```
+
+---
+
+## 5. Watch it work
+
+**Follow Agent 3 decisions in real time:**
+```bash
+tail -f decision_agents/agent3/agent3_log.txt
+```
+
+**Follow Agent 4 governance in real time:**
+```bash
+tail -f decision_agents/agent4/agent4_log.txt
+```
+
+**Watch replica count change:**
+```bash
+watch -n5 kubectl get deployment stress-test-app -n test-workload
+```
+
+**Inspect latest prediction:**
+```bash
+redis-cli -p 6380 XREVRANGE stream:prediction:complete + - COUNT 1
+```
+
+---
+
+## 6. Trigger a manual scale-down (for testing)
+
+If you want to force-test the scale-down path immediately (without waiting for idle):
 
 ```bash
-python - <<'PY'
-import json
+# Clear any active cooldown key
+redis-cli -p 6380 DEL cooldown:test-workload:stress-test-app
+
+# Trigger a low-CPU prediction event
+python scratch/trigger_scale_down.py
+```
+
+---
+
+## 7. Open the dashboard
+
+```bash
+uvicorn dashboard.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open `http://localhost:8000` to see the K8s Sentinel dashboard.
+
+---
+
+## Alternative: Prometheus-free mode (Redis bridge)
+
+If you don't have Prometheus, you can inject raw metric events directly:
+
+```bash
+bash scripts/run_all_agents.sh --source redis
+```
+
+Then publish sample events to `stream:metrics:latest`:
+
+```python
+import json, redis
 from datetime import datetime, timezone
-import redis
 
 r = redis.Redis(host='localhost', port=6380, decode_responses=True)
-msg = {
-  'namespace': 'test-workload',
-  'pod': 'stress-test-app',
-  'container': 'stress-test-app',
-  'features_json': json.dumps({
-    'container_cpu_usage_seconds_total': 1.0,
-    'container_memory_working_set_bytes': 120_000_000,
-  }),
-  'raw_limits_json': json.dumps({
-    'cpu_limit': 1.0,
-    'memory_limit': 536_870_912,
-    'throttle_ratio': 0.02,
-    'memory_failcnt': 0,
-  }),
-  'timestamp': datetime.now(timezone.utc).isoformat(),
-}
-print('xadd', r.xadd('stream:metrics:latest', msg))
-PY
+r.xadd('stream:metrics:latest', {
+    'namespace': 'test-workload',
+    'pod': 'stress-test-app',
+    'container': 'stress-container',
+    'features_json': json.dumps({
+        'container_cpu_usage_seconds_total': 1.5,
+        'container_memory_working_set_bytes': 200_000_000,
+    }),
+    'raw_limits_json': json.dumps({
+        'cpu_limit': 2.0,
+        'memory_limit': 536_870_912,
+        'throttle_ratio': 0.05,
+        'memory_failcnt': 0,
+        'cpu_usage_cores': 1.5,    # important for idle-detection clamp
+    }),
+    'timestamp': datetime.now(timezone.utc).isoformat(),
+})
 ```
 
-## 5) Run Stage 2 (Prediction) only
+---
 
-In a second terminal:
+## Troubleshooting
 
-```bash
-pipeline-agentic \
-  --agent prediction \
-  --model-path data/models
-```
+| Symptom | Fix |
+|---------|-----|
+| Agent won't start — "lock held by another instance" | `redis-cli -p 6380 DEL lock:agent3:optimization lock:agent4:governance lock:agent5:executor` |
+| Pipeline stuck in SCALE_UP during idle workload | Forecast sanity clamp should activate. If not, verify `cpu_usage_cores` is present in the ingestion stream. |
+| Scale-down rejected with `ANTI_FLAPPING_COOLDOWN` | `redis-cli -p 6380 DEL cooldown:test-workload:stress-test-app` or wait for 300s TTL |
+| Agent 4 LLM rejecting valid scale-ups | Check logs for `HIGH_CPU_RISK` on scale_up — should now be suppressed. Restart agents to pick up latest code. |
+| LLM inference taking >15s | Switch from `local` to `gemini` provider: `--llm-provider gemini` (requires `GEMINI_API_KEY`) |
 
-Behavior:
+---
 
-- Sleeps until it receives `stream:ingestion:complete`
-- Reads latest features and 24h InfluxDB context
-- Runs PatchTST CPU+memory inference
-- Writes `stream:prediction:complete` and live CSV prediction rows
+## Docs Index
 
-## 6) Verify outputs
-
-Redis stream check:
-
-```bash
-docker exec -it pipeline-redis redis-cli XRANGE stream:prediction:complete - + COUNT 5
-```
-
-InfluxDB check (Data Explorer):
-
-- Measurement: `metrics`
-- Measurement: `predictions`
-
-CSV live check:
-
-```bash
-ls -lh data/csv/metrics
-ls -lh data/csv/predictions
-```
-
-## Optional: run both in one process
-
-```bash
-pipeline-agentic \
-  --agent both \
-  --namespace test-workload \
-  --pod <stress-test-app-pod> \
-  --container stress-container \
-  --prometheus-url http://localhost:30000
-```
+- `docs/CLUSTER_SETUP.md` — Prometheus + kube-prometheus-stack setup
+- `docs/IMPLEMENTATION_SUMMARY.md` — detailed agent architecture
+- `docs/PROJECT_REPORT.md` — project report
+- `configs/prediction.yaml` — risk thresholds and forecast horizons
