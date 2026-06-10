@@ -715,12 +715,18 @@ class GovernanceAgent:
 
         if not flags:
             # Branch 1: Clean pass, auto-approve
-            outcome           = GovernanceOutcome.APPROVED
-            final_replicas    = recommended
-            final_explanation = (
-                f"All governance rules passed. Scaling from "
-                f"{current_replicas} → {final_replicas} replicas approved automatically."
-            )
+            outcome        = GovernanceOutcome.APPROVED
+            final_replicas = recommended
+            action         = payload.get("recommended_action", "hold")
+            if final_replicas != current_replicas:
+                final_explanation = (
+                    f"All governance rules passed. {action.replace('_', ' ').title()} from "
+                    f"{current_replicas} → {final_replicas} replicas approved automatically."
+                )
+            else:
+                final_explanation = (
+                    f"All governance rules passed. Holding at {current_replicas} replica(s)."
+                )
 
         else:
             # Branch 2/3: Escalate to LLM
