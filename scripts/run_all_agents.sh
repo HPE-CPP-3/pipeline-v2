@@ -26,14 +26,18 @@ SOURCE="prometheus" # prometheus | redis
 
 REDIS_HOST="${REDIS_HOST:-${PIPELINE_REDIS_HOST:-localhost}}"
 REDIS_PORT="${REDIS_PORT:-${PIPELINE_REDIS_PORT:-6380}}"
-PROMETHEUS_URL="${PROMETHEUS_URL:-${PIPELINE_PROMETHEUS_URL:-http://localhost:9090}}"
+PROMETHEUS_URL="${PROMETHEUS_URL:-${PIPELINE_PROMETHEUS_URL:-http://localhost:30000}}"
 MODEL_PATH="${MODEL_PATH:-${PIPELINE_MODEL_PATH:-data/models}}"
 
 NAMESPACE="${NAMESPACE:-${PIPELINE_NAMESPACE:-}}"
 POD="${POD:-${PIPELINE_POD:-}}"
 CONTAINER="${CONTAINER:-${PIPELINE_CONTAINER:-}}"
 
-GROQ_KEY="${GROQ_API_KEY:-}"
+GEMINI_KEY="${GEMINI_API_KEY:-}"
+AGENT4_LLM_PROVIDER="${AGENT4_LLM_PROVIDER:-gemini}"
+HOSTED_LLM_URL="${HOSTED_LLM_URL:-https://elian-isochimal-kathaleen.ngrok-free.dev}"
+HOSTED_LLM_MODEL="${HOSTED_LLM_MODEL:-gemma4:12b}"
+HOSTED_LLM_API_KEY="${HOSTED_LLM_API_KEY:-}"
 
 usage() {
   cat <<EOF
@@ -50,6 +54,7 @@ Options:
   --redis-port    Redis port           (default: $REDIS_PORT)
   --prometheus-url Prometheus base URL (default: $PROMETHEUS_URL)
   --model-path    Model directory      (default: $MODEL_PATH)
+  --llm-provider  gemini | hosted | local (default: $AGENT4_LLM_PROVIDER)
 EOF
 }
 
@@ -63,6 +68,7 @@ while [[ $# -gt 0 ]]; do
     --redis-port) REDIS_PORT="$2"; shift 2 ;;
     --prometheus-url) PROMETHEUS_URL="$2"; shift 2 ;;
     --model-path) MODEL_PATH="$2"; shift 2 ;;
+    --llm-provider) AGENT4_LLM_PROVIDER="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1"; usage; exit 2 ;;
   esac
@@ -198,20 +204,33 @@ start_bg "Agent3" "$PYTHON_BIN" "$ROOT/decision_agents/agent3/agent3_optimizatio
   --log-file "$ROOT/decision_agents/agent3/agent3_log.txt"
 
 # Agent 4
-if [[ -n "$GROQ_KEY" ]]; then
-  start_bg "Agent4" "$PYTHON_BIN" "$ROOT/decision_agents/agent4/agent4_governance.py" \
-    --mode redis \
-    --redis-host "$REDIS_HOST" \
-    --redis-port "$REDIS_PORT" \
-    --log-file "$ROOT/decision_agents/agent4/agent4_log.txt" \
-    --groq-key "$GROQ_KEY"
-else
-  start_bg "Agent4" "$PYTHON_BIN" "$ROOT/decision_agents/agent4/agent4_governance.py" \
-    --mode redis \
-    --redis-host "$REDIS_HOST" \
-    --redis-port "$REDIS_PORT" \
-    --log-file "$ROOT/decision_agents/agent4/agent4_log.txt"
+agent4_cmd=(
+  "$PYTHON_BIN" "$ROOT/decision_agents/agent4/agent4_governance.py"
+  --mode redis
+  --redis-host "$REDIS_HOST"
+  --redis-port "$REDIS_PORT"
+  --log-file "$ROOT/decision_agents/agent4/agent4_log.txt"
+  --llm-provider "$AGENT4_LLM_PROVIDER"
+)
+if [[ -n "$GEMINI_KEY" ]]; then
+  agent4_cmd+=(--gemini-key "$GEMINI_KEY")
 fi
+if [[ "$AGENT4_LLM_PROVIDER" == "hosted" ]]; then
+  agent4_cmd+=(
+    --hosted-llm-url "$HOSTED_LLM_URL"
+    --hosted-llm-model "$HOSTED_LLM_MODEL"
+  )
+  if [[ -n "$HOSTED_LLM_API_KEY" ]]; then
+    agent4_cmd+=(--hosted-llm-api-key "$HOSTED_LLM_API_KEY")
+  fi
+fi
+start_bg "Agent4" "${agent4_cmd[@]}"
+
+# Agent 5
+start_bg "Agent5" "$PYTHON_BIN" "$ROOT/decision_agents/agent5/agent5_executor.py" \
+  --redis-host "$REDIS_HOST" \
+  --redis-port "$REDIS_PORT" \
+  --log-file "$ROOT/decision_agents/agent5/agent5_log.txt"
 
 echo ""
 echo "All agents launched. Press Ctrl+C to stop."
@@ -221,6 +240,7 @@ echo "  stream:ingestion:complete    <-- Agent 1 writes here"
 echo "  stream:prediction:complete   <-- Agent 2 writes here"
 echo "  stream:optimization:complete <-- Agent 3 writes here"
 echo "  stream:governance:complete   <-- Agent 4 writes here"
+echo "  stream:retrain:request       <-- Agent 5 writes retraining requests here"
 echo ""
 
 wait

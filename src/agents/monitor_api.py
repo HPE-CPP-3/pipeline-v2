@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from ..models import ModelRegistry
+from ..models.model_registry import ModelRegistry
 from ..storage.influxdb_store import InfluxDBStore
 from ..storage.redis_store import RedisStore
 

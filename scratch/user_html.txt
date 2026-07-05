@@ -1,0 +1,24 @@
+<USER_REQUEST>
+I want to make a beautiful, intuitive and professional looking dashboard which reads the logs and shows clear output. Following is an example you can use 
+
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dashboard Overview - K8s Sentinel</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Fira+Code:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        background: "#0D1117",
+        surface: "#161B22",
+        "surface-variant": "#21262D",
+        "on-background": "#C9D1D9",
+        "on-surface": "#C9D1D9",
+<truncated 17607 bytes>

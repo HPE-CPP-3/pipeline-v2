@@ -757,6 +757,9 @@ class OptimizationEngine:
     def __init__(self, config: OptimizationConfig = OptimizationConfig()):
         self.cfg        = config
         self.calculator = ReplicaCalculator(config)
+        self.last_scale_up_time = 0.0
+        self.last_scale_down_time = 0.0
+        self.scale_down_cooldown_sec = float(os.environ.get("SCALE_DOWN_COOLDOWN_SEC", "300.0"))
 
     def decide(self, forecast: dict) -> tuple[ScalingAction, int, str]:
         """Returns (action, recommended_replicas, reason)."""
@@ -767,6 +770,7 @@ class OptimizationEngine:
         oom_risk_level      = forecast.get("oom_risk_level",            "LOW")
         throttle_prob       = float(forecast.get("throttle_prob",       0.0))
         oom_prob            = float(forecast.get("oom_prob",            0.0))
+        current_time        = time.time()
 
         # ── Resolve QoS policy ────────────────────────────────────────────
         # qos_class is written into forecast by ResourceOptimizationAgent.run()
@@ -785,15 +789,15 @@ class OptimizationEngine:
         # ── Parse Agent 2 forecast values ────────────────────────────────
         cpu_forecast = _parse_forecast(forecast.get("cpu_forecast_json", "{}"))
         mem_forecast = _parse_forecast(forecast.get("memory_forecast_json", "{}"))
-        cpu_p90_15m  = _get_quantile(cpu_forecast, horizon="15", quantile="0.9")
-        mem_p90_15m  = _get_quantile(mem_forecast, horizon="15", quantile="0.9")
+        cpu_p90_5m   = _get_quantile(cpu_forecast, horizon="5", quantile="0.9")
+        mem_p90_5m   = _get_quantile(mem_forecast, horizon="5", quantile="0.9")
 
         # Convert to utilization ratios when limits are available.
         # Agent 4 governance thresholds are ratio-based (0.0-1.0+).
         cpu_limit    = float(forecast.get("cpu_limit",    0.0) or 0.0)
         mem_limit    = float(forecast.get("memory_limit", 0.0) or 0.0)
-        cpu_pressure = (cpu_p90_15m / cpu_limit) if cpu_limit > 0 else cpu_p90_15m
-        mem_pressure = (mem_p90_15m / mem_limit) if mem_limit > 0 else mem_p90_15m
+        cpu_pressure = (cpu_p90_5m / cpu_limit) if cpu_limit > 0 else cpu_p90_5m
+        mem_pressure = (mem_p90_5m / mem_limit) if mem_limit > 0 else mem_p90_5m
 
         # ── Log full decision context ─────────────────────────────────────
         logger.info(
@@ -808,8 +812,8 @@ class OptimizationEngine:
             f"oom_risk={oom_risk_level} (prob={oom_prob:.2f})"
         )
         logger.info(
-            f"  cpu_p90_15m={cpu_p90_15m:.4f} (pressure={cpu_pressure:.2f}) | "
-            f"mem_p90_15m={mem_p90_15m:.0f}B (pressure={mem_pressure:.2f}) | "
+            f"  cpu_p90_5m={cpu_p90_5m:.4f} (pressure={cpu_pressure:.2f}) | "
+            f"mem_p90_5m={mem_p90_5m:.0f}B (pressure={mem_pressure:.2f}) | "
             f"current_replicas={current_replicas}"
         )
 
@@ -834,6 +838,9 @@ class OptimizationEngine:
                 target_utilization,
                 min_replicas,
             )
+            if recommended > current_replicas:
+                self.last_scale_up_time = current_time
+
             parts = []
             if throttle_risk_level in self.cfg.RISK_LEVELS_HIGH:
                 parts.append(
@@ -866,6 +873,29 @@ class OptimizationEngine:
                 min_replicas,
             )
             if recommended < current_replicas:
+                # Check scale-down cooldown
+                time_since_up = current_time - self.last_scale_up_time
+                time_since_down = current_time - self.last_scale_down_time
+
+                if time_since_up < self.scale_down_cooldown_sec:
+                    reason = (
+                        f"Scale-down blocked by scale-up cooldown. "
+                        f"Last scale-up was {time_since_up:.1f}s ago (cooldown={self.scale_down_cooldown_sec}s). "
+                        f"Holding at {current_replicas} replicas."
+                    )
+                    logger.info(f"  -> Branch 4 (via Branch 2 cooldown): HOLD -- {reason}")
+                    return ScalingAction.HOLD, current_replicas, reason
+
+                if time_since_down < self.scale_down_cooldown_sec:
+                    reason = (
+                        f"Scale-down blocked by scale-down cooldown. "
+                        f"Last scale-down was {time_since_down:.1f}s ago (cooldown={self.scale_down_cooldown_sec}s). "
+                        f"Holding at {current_replicas} replicas."
+                    )
+                    logger.info(f"  -> Branch 4 (via Branch 2 cooldown): HOLD -- {reason}")
+                    return ScalingAction.HOLD, current_replicas, reason
+
+                self.last_scale_down_time = current_time
                 reason = (
                     f"Both CPU ({throttle_risk_level}) and memory ({oom_risk_level}) "
                     f"risks are LOW with confidence={confidence:.2f}. "

@@ -12,6 +12,13 @@ from ..models.patchtst import PatchTST
 logger = logging.getLogger(__name__)
 
 
+def _model_device(model) -> torch.device:
+    try:
+        return next(model.parameters()).device
+    except StopIteration:
+        return torch.device("cpu")
+
+
 class CPUPredictor:
     """
     CPU usage predictor using PatchTST
@@ -39,7 +46,11 @@ class CPUPredictor:
         if features.ndim == 2:
             features = np.expand_dims(features, axis=0)
 
-        features_tensor = torch.FloatTensor(features)
+        features_tensor = torch.as_tensor(
+            features,
+            dtype=torch.float32,
+            device=_model_device(self.model),
+        )
 
         self.model.eval()
         with torch.no_grad():
@@ -83,7 +94,11 @@ class CPUPredictor:
         if np.isinf(features).any():
             logger.warning("Inf in input features!")
 
-        features_tensor = torch.FloatTensor(features)
+        features_tensor = torch.as_tensor(
+            features,
+            dtype=torch.float32,
+            device=_model_device(self.model),
+        )
 
         self.model.eval()
         with torch.no_grad():

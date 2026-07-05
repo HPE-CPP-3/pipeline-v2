@@ -90,6 +90,7 @@ logs/
 # Decision agents (generated artifacts)
 decision_agents/**/agent3_log.txt
 decision_agents/**/agent4_log.txt
+decision_agents/**/agent5_log.txt
 decision_agents/**/action_log.json
 decision_agents/**/agent4_ready_payload.json
 decision_agents/**/decision_log.json

@@ -31,8 +31,9 @@ class OOMRiskCalculator:
         self.high_ratio = config.get("high_ratio", 0.85)
         self.failcnt_threshold = config.get("failcnt_threshold", 1)
         self.growth_rate_high = config.get("growth_rate_high", 0.1)
+        self.horizon = config.get("horizon", 5)
 
-        logger.info("Initialized OOMRiskCalculator")
+        logger.info(f"Initialized OOMRiskCalculator with target horizon={self.horizon}m")
 
     def calculate_risk(
         self,
@@ -66,20 +67,15 @@ class OOMRiskCalculator:
                 "reason": "No memory limit set",
             }
 
-        # Get p90 forecast for 15min horizon
-        p90_15min = memory_forecast.get(15, {}).get(0.9, 0.0)
-        p90_10min = memory_forecast.get(10, {}).get(0.9, 0.0)
+        # Get p90 forecast for target and other horizons
+        p90_target = memory_forecast.get(self.horizon, {}).get(0.9, 0.0)
         p90_5min = memory_forecast.get(5, {}).get(0.9, 0.0)
-
-        if p90_15min < 1000 and memory_limit > 1_000_000:
-            p90_15min = p90_15min * memory_limit
-            p90_10min = p90_10min * memory_limit
-            p90_5min = p90_5min * memory_limit
+        p90_10min = memory_forecast.get(10, {}).get(0.9, 0.0)
+        p90_15min = memory_forecast.get(15, {}).get(0.9, 0.0)
 
         # Calculate ratios
+        ratio_target = p90_target / memory_limit
         ratio_15min = p90_15min / memory_limit
-        ratio_10min = p90_10min / memory_limit
-        ratio_5min = p90_5min / memory_limit
 
         # Determine risk level
         oom_risk = "LOW"
@@ -88,33 +84,36 @@ class OOMRiskCalculator:
 
         # Critical: p90 forecast >= 95% of limit OR recent OOM
         if (
-            ratio_15min >= self.critical_ratio
+            ratio_target >= self.critical_ratio
             or current_failcnt >= self.failcnt_threshold
             or (failcnt_spike is not None and failcnt_spike > 0)
         ):
             oom_risk = "CRITICAL"
             probability = 0.95
-            estimated_time = "5-15min"
+            estimated_time = f"<{self.horizon}min"
 
         # High: p90 forecast >= 85% of limit OR high growth rate
-        elif ratio_15min >= self.high_ratio or (
+        elif ratio_target >= self.high_ratio or (
             working_set_growth_rate and working_set_growth_rate > self.growth_rate_high
         ):
             oom_risk = "HIGH"
             probability = 0.8
-            estimated_time = "10-15min"
+            estimated_time = f"5-{self.horizon}min" if self.horizon > 5 else f"<{self.horizon}min"
 
         # Medium: p90 forecast >= 70% of limit
-        elif ratio_15min >= 0.7:
+        elif ratio_target >= 0.7:
             oom_risk = "MEDIUM"
             probability = 0.5
-            estimated_time = "15+min"
+            estimated_time = f"{self.horizon}+min"
 
         # Calculate estimated time more precisely
         if oom_risk in ["CRITICAL", "HIGH"]:
             # Linear extrapolation
             current_usage = memory_forecast.get(5, {}).get(0.5, p90_5min)
-            growth_per_min = (p90_15min - current_usage) / 10
+            if self.horizon > 5:
+                growth_per_min = (p90_target - current_usage) / (self.horizon - 5)
+            else:
+                growth_per_min = working_set_growth_rate or 0.0
 
             if growth_per_min > 0:
                 remaining = memory_limit - current_usage
@@ -129,7 +128,7 @@ class OOMRiskCalculator:
 
         # Determine reason
         reason = (
-            f"p90 forecast {p90_15min:.0f} / {memory_limit:.0f} ({ratio_15min:.1%})"
+            f"p90 forecast {p90_target:.0f} / {memory_limit:.0f} ({ratio_target:.1%})"
         )
         if current_failcnt > 0:
             reason += f", failcnt={current_failcnt}"
@@ -148,6 +147,7 @@ class OOMRiskCalculator:
                 "p90_10min": p90_10min,
                 "p90_15min": p90_15min,
                 "ratio_15min": ratio_15min,
+                "ratio_target": ratio_target,
                 "current_failcnt": current_failcnt,
                 "working_set_growth_rate": working_set_growth_rate,
                 "failcnt_spike": failcnt_spike,

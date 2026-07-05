@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import json
 import logging
+import os
 
 import pandas as pd
 
@@ -57,8 +58,9 @@ class CSVStore:
                     If None, df is written as-is to the raw file too
                     (caller should pass the pre-normalization frame).
         """
+        workload = self._get_workload_name(pod)
         if df.empty:
-            return self.metrics_dir / f"{namespace}__{pod}.csv"
+            return self.metrics_dir / f"{namespace}__{workload}.csv"
 
         # --- normalized file (for downstream Redis / InfluxDB consumers) ---
         out = df.copy()
@@ -67,11 +69,19 @@ class CSVStore:
         out["container"] = container or ""
         out["node"] = node or ""
 
-        filepath = self.metrics_dir / f"{namespace}__{pod}.csv"
+        filepath = self.metrics_dir / f"{namespace}__{workload}.csv"
         header = not filepath.exists()
-        out.to_csv(
-            filepath, mode="a", header=header, index=True, index_label="timestamp"
-        )
+        out = self._align_df_columns(out, filepath)
+
+        last_ts = self._get_last_timestamp(filepath)
+        if last_ts is not None:
+            out_index_dt = pd.to_datetime(out.index, format="mixed", utc=True)
+            out = out[out_index_dt > last_ts]
+
+        if not out.empty:
+            out.to_csv(
+                filepath, mode="a", header=header, index=True, index_label="timestamp"
+            )
 
         # --- raw file (for incremental fine-tuner) ---
         raw_frame = raw_df if raw_df is not None else df
@@ -82,17 +92,101 @@ class CSVStore:
             raw_out["container"] = container or ""
             raw_out["node"] = node or ""
 
-            raw_filepath = self.metrics_dir / f"{namespace}__{pod}__raw.csv"
+            raw_filepath = self.metrics_dir / f"{namespace}__{workload}__raw.csv"
             raw_header = not raw_filepath.exists()
-            raw_out.to_csv(
-                raw_filepath,
-                mode="a",
-                header=raw_header,
-                index=True,
-                index_label="timestamp",
-            )
+            raw_out = self._align_df_columns(raw_out, raw_filepath)
+
+            last_raw_ts = self._get_last_timestamp(raw_filepath)
+            if last_raw_ts is not None:
+                raw_out_index_dt = pd.to_datetime(raw_out.index, format="mixed", utc=True)
+                raw_out = raw_out[raw_out_index_dt > last_raw_ts]
+
+            if not raw_out.empty:
+                raw_out.to_csv(
+                    raw_filepath,
+                    mode="a",
+                    header=raw_header,
+                    index=True,
+                    index_label="timestamp",
+                )
 
         return filepath
+
+    def _get_last_timestamp(self, file_path: Path) -> datetime | None:
+        """Efficiently read the last timestamp from a CSV file."""
+        if not file_path.exists():
+            return None
+        try:
+            with open(file_path, "rb") as f:
+                try:
+                    f.seek(-2, os.SEEK_END)
+                    while f.read(1) != b"\n":
+                        f.seek(-2, os.SEEK_CUR)
+                except OSError:
+                    f.seek(0)
+                last_line = f.readline().decode().strip()
+                if last_line:
+                    parts = last_line.split(",")
+                    if parts and parts[0] != "timestamp":
+                        return pd.to_datetime(parts[0], format="mixed", utc=True)
+        except Exception as e:
+            logger.warning(f"Failed to read last timestamp from {file_path}: {e}")
+        return None
+
+    def _get_workload_name(self, pod_name: str) -> str:
+        """Resolve the workload/deployment name by removing pod-specific hashes/suffixes."""
+        parts = pod_name.split("-")
+        if len(parts) > 2:
+            return "-".join(parts[:-2])
+        return pod_name
+
+    def _align_df_columns(self, df_to_write: pd.DataFrame, file_path: Path) -> pd.DataFrame:
+        """Align DataFrame columns to match either the existing CSV file or a standard schema."""
+        if file_path.exists():
+            try:
+                with open(file_path, "r") as f:
+                    header_line = f.readline().strip()
+                if header_line:
+                    cols = header_line.split(",")
+                    if cols[0] == "timestamp":
+                        cols = cols[1:]
+                    # Reindex to match the file columns exactly
+                    return df_to_write.reindex(columns=cols, fill_value=0.0)
+            except Exception as e:
+                logger.warning(f"Failed to read header from {file_path}: {e}")
+
+        # Standard column order
+        standard_cols = [
+            "container_cpu_usage_seconds_total",
+            "container_cpu_cfs_throttled_seconds_total",
+            "container_memory_working_set_bytes",
+            "container_memory_failcnt",
+            "node_load1",
+            "node_load5",
+            "node_load15",
+            "node_memory_MemAvailable_bytes",
+            "node_disk_read_bytes_total",
+            "node_network_transmit_bytes_total",
+            "kube_pod_container_resource_requests_cpu",
+            "kube_pod_container_resource_requests_memory",
+            "kube_pod_container_resource_limits_cpu",
+            "kube_pod_container_resource_limits_memory",
+            "kube_pod_status_phase",
+            "kube_pod_container_status_restarts_total",
+            "derived_usage_vs_limit",
+            "derived_pressure_throttled_ratio",
+            "derived_cpu_volatility_5m",
+            "derived_cpu_volatility_10m",
+            "namespace",
+            "pod",
+            "container",
+            "node"
+        ]
+        extra_cols = [c for c in df_to_write.columns if c not in standard_cols]
+        target_cols = [c for c in standard_cols if c in df_to_write.columns] + extra_cols
+        if not target_cols:
+            return df_to_write
+        return df_to_write.reindex(columns=target_cols, fill_value=0.0)
 
     # ------------------------------------------------------------------
     # Predictions

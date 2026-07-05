@@ -71,7 +71,7 @@ async def main():
     # Prometheus
     prom_config = config.get("prometheus", {})
     prom_url = os.getenv(
-        "PIPELINE_PROMETHEUS_URL", prom_config.get("url", "http://localhost:9090")
+        "PIPELINE_PROMETHEUS_URL", prom_config.get("url", "http://localhost:30000")
     )
     prometheus_client = PrometheusClient(
         url=prom_url,

@@ -43,6 +43,8 @@ risk:
       high_ratio: 0.85
       # Current throttling ratio considered risky
       current_throttle_ratio_high: 0.1
+      # Target horizon in minutes for risk calculations
+      horizon: 5
     
     # CPU pressure thresholds
     pressure:
@@ -60,6 +62,8 @@ risk:
       high_ratio: 0.85
       # Memory failcnt threshold
       failcnt_threshold: 1
+      # Target horizon in minutes for risk calculations
+      horizon: 5
     
     # Memory pressure thresholds
     pressure:

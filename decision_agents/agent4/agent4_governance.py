@@ -154,6 +154,17 @@ class GovernanceConfig:
 
 
 # ─────────────────────────────────────────────
+# Helper: extract deployment name from pod name
+# ─────────────────────────────────────────────
+def _get_workload_name(pod_name: str) -> str:
+    """Resolve the workload/deployment name by removing pod‑specific hashes/suffixes."""
+    parts = pod_name.split("-")
+    if len(parts) > 2:
+        return "-".join(parts[:-2])
+    return pod_name
+
+
+# ─────────────────────────────────────────────
 # Rule-Based Engine
 # ─────────────────────────────────────────────
 
@@ -173,8 +184,9 @@ class RuleEngine:
         current_replicas  = payload.get("current_replicas", 1)
         recommended       = payload.get("recommended_replicas", current_replicas)
         action            = payload.get("recommended_action", "none")
-        cpu_p90_15m       = float(payload.get("cpu_forecast_p90_15m", 0.0) or 0.0)
-        memory_p90_15m_raw = float(payload.get("memory_forecast_p90_15m", 0.0) or 0.0)
+        # Read from 5-minute horizon keys as requested to minimize scale lag
+        cpu_p90_15m       = float(payload.get("cpu_forecast_p90_5m", 0.0) or 0.0)
+        memory_p90_15m_raw = float(payload.get("memory_forecast_p90_5m", 0.0) or 0.0)
         memory_limit      = float(payload.get("memory_limit", 0.0) or 0.0)
 
         # Memory forecast should normally be a ratio (~0..2). If it's huge, it's likely bytes.
@@ -207,20 +219,37 @@ class RuleEngine:
                     f"(threshold={self.cfg.SCALE_JUMP_AGGRESSIVE_RATIO}x)"
                 )
 
-        # Rule 3 — High CPU pressure (even if memory is okay)
-        if cpu_p90_15m > self.cfg.CPU_FORECAST_HIGH_THRESHOLD:
+        # Rule 3 — High CPU pressure
+        # NOTE: This flag is intentionally SUPPRESSED for scale_up actions.
+        # High CPU is the *reason* to scale up — flagging it would cause the LLM
+        # to reject a valid, self-consistent decision ("don't scale up because CPU is high"
+        # is backwards physics). The flag is only meaningful for scale_down or hold, where
+        # scaling down under high CPU would be dangerous.
+        if cpu_p90_15m > self.cfg.CPU_FORECAST_HIGH_THRESHOLD and action != "scale_up":
             flags.append(FlagReason.HIGH_CPU_RISK)
             logger.info(
                 f"  [FLAG] {FlagReason.HIGH_CPU_RISK}: "
                 f"cpu_p90_15m={cpu_p90_15m:.2f} > threshold={self.cfg.CPU_FORECAST_HIGH_THRESHOLD}"
             )
+        elif cpu_p90_15m > self.cfg.CPU_FORECAST_HIGH_THRESHOLD and action == "scale_up":
+            logger.info(
+                f"  [OK] HIGH_CPU_RISK suppressed for scale_up action "
+                f"(cpu_p90_15m={cpu_p90_15m:.2f}): high CPU confirms scale-up is correct."
+            )
 
-        # Rule 4 — High memory pressure (even if CPU is okay)
-        if memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD:
+        # Rule 4 — High memory pressure
+        # NOTE: Similarly suppressed for scale_up — high memory pressure SUPPORTS the
+        # scale-up recommendation and should not cause LLM re-review.
+        if memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD and action != "scale_up":
             flags.append(FlagReason.HIGH_MEMORY_RISK)
             logger.info(
                 f"  [FLAG] {FlagReason.HIGH_MEMORY_RISK}: "
                 f"memory_p90_15m={memory_p90_15m:.2f} > threshold={self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD}"
+            )
+        elif memory_p90_15m is not None and memory_p90_15m > self.cfg.MEMORY_FORECAST_HIGH_THRESHOLD and action == "scale_up":
+            logger.info(
+                f"  [OK] HIGH_MEMORY_RISK suppressed for scale_up action "
+                f"(memory_p90_15m={memory_p90_15m:.2f}): high memory confirms scale-up is correct."
             )
 
         # Rule 5 — Scale-down with low confidence is dangerous
@@ -240,21 +269,8 @@ class RuleEngine:
 
 
 # ─────────────────────────────────────────────
-# LLM Reasoning (Mocked)
+# LLM Reasoning (Gemini, hosted OpenAI-compatible endpoint, or local llama.cpp)
 # ─────────────────────────────────────────────
-# To use a real LLM, replace the body of `reason()` with an API call.
-# Example for OpenAI:
-#   import openai
-#   client = openai.OpenAI(api_key="sk-...")
-#   resp = client.chat.completions.create(model="gpt-4o", messages=[...])
-#   return resp.choices[0].message.content
-#
-# Example for Gemini:
-#   import google.generativeai as genai
-#   genai.configure(api_key="YOUR_KEY")
-#   model = genai.GenerativeModel("gemini-1.5-flash")
-#   return model.generate_content(prompt).text
-
 from pydantic import BaseModel, Field, ValidationError
 
 class LLMResponseSchema(BaseModel):
@@ -266,19 +282,59 @@ class LLMReasoner:
     """
     Receives the full context (payload + flags) and returns a
     plain-English reasoning string plus whether to approve or reject.
-    Currently MOCKED — replace reason() with a real API call.
     """
 
-    def __init__(self, api_key: str = None, model_type="local", local_model_path="models/governance_qwen_3b_q4_k_m.gguf"):
-        self.mode = model_type # "local" or "groq"
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+    def __init__(
+        self,
+        api_key: str = None,
+        model_type="hosted",
+        local_model_path="models/governance_qwen_3b_q4_k_m.gguf",
+        gemini_model: str | None = None,
+        hosted_llm_url: str | None = None,
+        hosted_llm_model: str | None = None,
+        hosted_llm_api_key: str | None = None,
+    ):
+        self.mode = model_type  # "gemini", "hosted", or "local"
+        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.gemini_model = gemini_model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        self.hosted_llm_url = (
+            hosted_llm_url
+            or os.environ.get("HOSTED_LLM_URL")
+            or "https://elian-isochimal-kathaleen.ngrok-free.dev"
+        ).rstrip("/")
+        self.hosted_llm_model = hosted_llm_model or os.environ.get("HOSTED_LLM_MODEL", "gemma4:12b")
+        self.hosted_llm_api_key = hosted_llm_api_key or os.environ.get("HOSTED_LLM_API_KEY")
+        self.client = None
+        self.local_llm = None
         
-        if self.mode == "groq" and self.api_key:
-            from groq import AsyncGroq
-            self.client = AsyncGroq(api_key=self.api_key)
-            self.local_llm = None
-        else:
-            self.client = None
+        if self.mode == "gemini":
+            if not self.api_key:
+                logger.warning("GEMINI_API_KEY is not set. Gemini mode will use mock LLM response.")
+                return
+
+            try:
+                import google.generativeai as genai
+            except ImportError:
+                logger.warning("google-generativeai not installed. Gemini mode will use mock LLM response.")
+                return
+
+            genai.configure(api_key=self.api_key)
+            self.client = genai.GenerativeModel(
+                model_name=self.gemini_model,
+                generation_config={
+                    "temperature": 0.1,
+                    "max_output_tokens": 200,
+                    "response_mime_type": "application/json",
+                }
+            )
+            logger.info(f"Gemini client initialized successfully with model={self.gemini_model}")
+        elif self.mode == "hosted":
+            self.hosted_chat_url = f"{self.hosted_llm_url}"
+            logger.info(
+                f"Hosted LLM initialized with url={self.hosted_chat_url}, "
+                f"model={self.hosted_llm_model}"
+            )
+        elif self.mode == "local":
             try:
                 from llama_cpp import Llama
                 logger.info(f"Loading local LLM from {local_model_path}...")
@@ -295,6 +351,8 @@ class LLMReasoner:
             except ValueError as e:
                 logger.warning(f"Could not load local model: {e}. Falling back to mock.")
                 self.local_llm = None
+        else:
+            raise ValueError(f"Unknown LLM model_type: {self.mode}")
 
     def _build_prompt(self, payload: dict, flags: list[FlagReason]) -> str:
         """
@@ -310,21 +368,54 @@ class LLMReasoner:
         current = payload.get('current_replicas', 1)
         recommended = payload.get('recommended_replicas', current)
 
-        return f"""Review this Kubernetes scaling decision:
+        return f"""You are reviewing a Kubernetes autoscaling governance decision.
+
+KEY PRINCIPLE: In Kubernetes, adding more replicas DISTRIBUTES CPU and memory load across more pods.
+Scaling up when CPU or memory is high is ALWAYS the correct response — it reduces per-pod pressure.
+NEVER reject a scale_up action solely because CPU or memory is high.
 
 Target Pod: {payload.get('pod')} (QoS: {payload.get('qos_class', 'Burstable')})
 Proposed Action: {payload.get('recommended_action')}
-Scale Delta: {current} -> {recommended}
+Scale Delta: {current} -> {recommended} replicas
 Model Confidence: {payload.get('confidence')} ({conf_label})
-Resource Pressure: CPU {payload.get('cpu_forecast_p90_15m')} ({cpu_label}), Mem {payload.get('memory_forecast_p90_15m')}
-Flags Raised: {flag_text}
+CPU p90 forecast: {payload.get('cpu_forecast_p90_15m')} ({cpu_label})
+Memory p90 forecast: {payload.get('memory_forecast_p90_15m')}
+Governance Flags: {flag_text}
+
+Your ONLY job is to check for governance concerns:
+- Is the scale jump suspiciously large (e.g. 10x in one step)?
+- Is the model confidence too low to trust this recommendation?
+- Are there signs of a flapping loop (repeated alternating up/down)?
+
+Do NOT reject a scale_up because resource pressure is high — that is the reason to scale up.
 
 STRICT OUTPUT RULES:
 - If you APPROVE: set final_replicas to {recommended}
 - If you REJECT: set final_replicas to {current} (the current safe count — NEVER 0)
 - final_replicas must be a positive integer between 1 and 20
 
-Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas": int, "reasoning": "string"}}"""
+Output JSON only: {{"should_approve": bool, "final_replicas": int, "reasoning": "string"}}"""
+
+    def _parse_llm_json(self, res_text: str) -> LLMResponseSchema:
+        if "```json" in res_text:
+            res_text = res_text.split("```json")[1].split("```")[0]
+        elif "```" in res_text:
+            res_text = res_text.split("```")[1].split("```")[0]
+
+        return LLMResponseSchema(**json.loads(res_text.strip()))
+
+    def _validated_tuple(
+        self,
+        validated_data: LLMResponseSchema,
+        payload: dict,
+    ) -> tuple[str, bool, int]:
+        should_approve = validated_data.should_approve
+        final_replicas = validated_data.final_replicas
+
+        if not should_approve:
+            final_replicas = payload.get("current_replicas", 1)
+
+        return validated_data.reasoning, should_approve, final_replicas
 
     async def reason(
         self,
@@ -342,36 +433,81 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
         prompt = self._build_prompt(payload, flags)
         logger.debug("LLM Prompt:\n" + prompt)
 
-        # 2. Call the Model
-        if self.mode == "groq" and self.client:
+        # 2. Call the Model – Gemini version
+        if self.mode == "gemini" and self.client:
+            res_text = ""
             try:
-                response = await self.client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.3-70b-versatile",
-                    response_format={"type": "json_object"},
-                    max_tokens=200,
-                    timeout=10.0
-                )
-                res_text = response.choices[0].message.content
-                import json
-                try:
-                    data = json.loads(res_text)
-                    validated_data = LLMResponseSchema(**data)
-                    should_approve = validated_data.should_approve
-                    final_replicas = validated_data.final_replicas
-                    
-                    if not should_approve:
-                        final_replicas = payload.get("current_replicas", 1) # Force safety hold
-                        
-                    return validated_data.reasoning, should_approve, final_replicas
-                except json.JSONDecodeError:
-                    return f"Failed to parse LLM JSON: {res_text}", False, payload.get('current_replicas', 1)
-                except ValidationError as e:
-                    logger.error(f"LLM output failed schema validation: {e}")
-                    return "LLM returned malformed data.", False, payload.get('current_replicas', 1)
+                # Gemini doesn't have native async, run in thread pool
+                def _sync_gemini_call():
+                    response = self.client.generate_content(prompt)
+                    return response.text
+                
+                res_text = await asyncio.get_event_loop().run_in_executor(None, _sync_gemini_call)
+                
+                validated_data = self._parse_llm_json(res_text)
+                return self._validated_tuple(validated_data, payload)
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse Gemini JSON: {res_text[:200]}, error: {e}")
+                return f"Failed to parse LLM JSON: {res_text[:100]}", False, payload.get('current_replicas', 1)
+            except ValidationError as e:
+                logger.error(f"Gemini output failed schema validation: {e}")
+                return "LLM returned malformed data.", False, payload.get('current_replicas', 1)
             except Exception as e:
-                logger.error(f"Groq API Error: {e}")
+                logger.error(f"Gemini API Error: {e}")
                 return "LLM unreachable, defaulting to safe hold.", False, payload.get('current_replicas', 1)
+
+        # 3. Hosted OpenAI-compatible LLM
+        elif self.mode == "hosted":
+            res_text = ""
+            try:
+                import httpx
+
+                headers = {"Content-Type": "application/json"}
+                if self.hosted_llm_api_key:
+                    headers["Authorization"] = f"Bearer {self.hosted_llm_api_key}"
+
+                request_payload = {
+                    "model": self.hosted_llm_model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a Kubernetes autoscaling governance agent. "
+                                "Always respond with a JSON object containing: "
+                                "should_approve (boolean), final_replicas (integer), reasoning (string)."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 200,
+                }
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        self.hosted_chat_url,
+                        headers=headers,
+                        json=request_payload,
+                    )
+                    response.raise_for_status()
+
+                data = response.json()
+                res_text = data["choices"][0]["message"]["content"]
+                validated_data = self._parse_llm_json(res_text)
+                return self._validated_tuple(validated_data, payload)
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse hosted LLM JSON: {res_text[:200]}, error: {e}")
+                return f"Failed to parse hosted LLM JSON: {res_text[:100]}", False, payload.get('current_replicas', 1)
+            except (KeyError, IndexError, ValidationError) as e:
+                logger.error(f"Hosted LLM output failed schema validation: {e}")
+                return "Hosted LLM returned malformed data.", False, payload.get('current_replicas', 1)
+            except Exception as e:
+                logger.error(f"Hosted LLM API Error: {e}")
+                return "Hosted LLM unreachable, defaulting to safe hold.", False, payload.get('current_replicas', 1)
+
+        # 4. Local LLM (llama.cpp) fallback
         elif self.local_llm:
             try:
                 logger.info("Running local LLM inference...")
@@ -385,17 +521,9 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
                     temperature=0.1
                 )
                 res_text = response["choices"][0]["message"]["content"]
-                import json
                 try:
-                    data = json.loads(res_text)
-                    validated_data = LLMResponseSchema(**data)
-                    should_approve = validated_data.should_approve
-                    final_replicas = validated_data.final_replicas
-                    
-                    if not should_approve:
-                        final_replicas = payload.get("current_replicas", 1) # Force safety hold
-                        
-                    return validated_data.reasoning, should_approve, final_replicas
+                    validated_data = self._parse_llm_json(res_text)
+                    return self._validated_tuple(validated_data, payload)
                 except json.JSONDecodeError:
                     return f"Failed to parse LLM JSON: {res_text}", False, payload.get('current_replicas', 1)
                 except ValidationError as e:
@@ -404,9 +532,11 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
             except Exception as e:
                 logger.error(f"Local LLM Error: {e}")
                 return "Local LLM failed, defaulting to safe hold.", False, payload.get('current_replicas', 1)
+        
+        # 5. Mock fallback (no configured client)
         else:
-             logger.warning("No GROQ_API_KEY and no local model loaded, using mock LLM response.")
-             return self._mock_llm_response(payload, flags)
+            logger.warning("LLM client unavailable, using mock LLM response.")
+            return self._mock_llm_response(payload, flags)
 
     def _mock_llm_response(
         self,
@@ -490,10 +620,24 @@ Analyze if this is safe. Output JSON: {{"should_approve": bool, "final_replicas"
 
 class GovernanceAgent:
 
-    def __init__(self, groq_api_key: str = None):
+    def __init__(
+        self,
+        llm_provider: str = "gemini",
+        gemini_api_key: str = None,
+        gemini_model: str | None = None,
+        hosted_llm_url: str | None = None,
+        hosted_llm_model: str | None = None,
+        hosted_llm_api_key: str | None = None,
+    ):
         self.rule_engine  = RuleEngine(GovernanceConfig())
-        model_type = "groq" if groq_api_key else "local"
-        self.llm_reasoner = LLMReasoner(api_key=groq_api_key, model_type=model_type)
+        self.llm_reasoner = LLMReasoner(
+            api_key=gemini_api_key,
+            model_type=llm_provider,
+            gemini_model=gemini_model,
+            hosted_llm_url=hosted_llm_url,
+            hosted_llm_model=hosted_llm_model,
+            hosted_llm_api_key=hosted_llm_api_key,
+        )
 
     async def run(self, payload: dict) -> GovernanceDecision:
         logger.info("=" * 60)
@@ -514,7 +658,8 @@ class GovernanceAgent:
         recommended      = payload.get("recommended_replicas", current_replicas)
 
         # [NEW] CIRCUIT BREAKER 1: The "OOM Panic" Fast-Track
-        memory_p90 = payload.get("memory_forecast_p90_15m", 0.0)
+        # Read from 5-minute horizon to detect memory spike faster
+        memory_p90 = payload.get("memory_forecast_p90_5m", 0.0)
         if memory_p90 > 0.95 and payload.get("recommended_action") == "scale_up":
             logger.warning("CIRCUIT BREAKER: OOM Panic Fast-Track triggered.")
             return GovernanceDecision(
@@ -527,18 +672,34 @@ class GovernanceAgent:
                 timestamp=datetime.now(timezone.utc).isoformat()
             )
 
-        # [NEW] CIRCUIT BREAKER 2: The "Insanity" Hard-Reject
+        # [NEW] CIRCUIT BREAKER 2: Cap at Absolute Maximum Replicas
         if recommended > self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE:
-            logger.warning(f"CIRCUIT BREAKER: Insanity Hard-Reject triggered. {recommended} > {self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}")
-            return GovernanceDecision(
-                outcome=GovernanceOutcome.REJECTED,
-                approved_replicas=current_replicas,
-                flags=[f.value for f in flags] + ["INSANITY_HARD_REJECT"],
-                rule_explanation=f"Requested {recommended} > Absolute Max ({self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}).",
-                llm_reasoning=None,
-                final_explanation="Hard rejected by rule engine due to mathematically impossible recommendation.",
-                timestamp=datetime.now(timezone.utc).isoformat()
+            logger.warning(
+                f"CIRCUIT BREAKER: Cap at Absolute Max triggered. "
+                f"Capping recommendation {recommended} to {self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}"
             )
+            recommended = self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE
+            if current_replicas >= self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE:
+                logger.info("Current replicas is already at absolute max. Maintaining current count.")
+                return GovernanceDecision(
+                    outcome=GovernanceOutcome.APPROVED,
+                    approved_replicas=current_replicas,
+                    flags=[f.value for f in flags],
+                    rule_explanation=f"Already at absolute max ({self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}).",
+                    llm_reasoning=None,
+                    final_explanation="Maintained at absolute max.",
+                    timestamp=datetime.now(timezone.utc).isoformat()
+                )
+            else:
+                return GovernanceDecision(
+                    outcome=GovernanceOutcome.APPROVED_WITH_CAP,
+                    approved_replicas=recommended,
+                    flags=[f.value for f in flags] + ["CAP_TO_MAX_REPLICAS"],
+                    rule_explanation=f"Capped requested {payload.get('recommended_replicas')} to Absolute Max ({self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE}).",
+                    llm_reasoning=None,
+                    final_explanation=f"Capped scaling action to absolute maximum of {self.rule_engine.cfg.MAX_REPLICAS_ABSOLUTE} replicas.",
+                    timestamp=datetime.now(timezone.utc).isoformat()
+                )
 
         if not flags:
             logger.info("  ✓ No flags raised — decision auto-approved")
@@ -554,12 +715,18 @@ class GovernanceAgent:
 
         if not flags:
             # Branch 1: Clean pass, auto-approve
-            outcome           = GovernanceOutcome.APPROVED
-            final_replicas    = recommended
-            final_explanation = (
-                f"All governance rules passed. Scaling from "
-                f"{current_replicas} → {final_replicas} replicas approved automatically."
-            )
+            outcome        = GovernanceOutcome.APPROVED
+            final_replicas = recommended
+            action         = payload.get("recommended_action", "hold")
+            if final_replicas != current_replicas:
+                final_explanation = (
+                    f"All governance rules passed. {action.replace('_', ' ').title()} from "
+                    f"{current_replicas} → {final_replicas} replicas approved automatically."
+                )
+            else:
+                final_explanation = (
+                    f"All governance rules passed. Holding at {current_replicas} replica(s)."
+                )
 
         else:
             # Branch 2/3: Escalate to LLM
@@ -657,7 +824,14 @@ async def run_redis_mode(args):
 
     logger.info(f"Connecting to Redis at {args.redis_host}:{args.redis_port}...")
     redis_store = RedisStore(host=args.redis_host, port=args.redis_port)
-    agent = GovernanceAgent(groq_api_key=args.groq_key)
+    agent = GovernanceAgent(
+        llm_provider=args.llm_provider,
+        gemini_api_key=args.gemini_key,
+        gemini_model=args.gemini_model,
+        hosted_llm_url=args.hosted_llm_url,
+        hosted_llm_model=args.hosted_llm_model,
+        hosted_llm_api_key=args.hosted_llm_api_key,
+    )
 
     logger.info("Agent 4: Listening on stream:optimization:complete...")
     last_id = "$"  # Read only new messages
@@ -712,7 +886,10 @@ async def run_redis_mode(args):
                 ns = payload.get('namespace', 'default')
                 pod = payload.get('pod', 'unknown')
                 action = payload.get('recommended_action')
-                cooldown_key = f"cooldown:{ns}:{pod}"
+                
+                # Use deployment name for anti‑flapping (issue #11)
+                deployment = _get_workload_name(pod)
+                cooldown_key = f"cooldown:{ns}:{deployment}"
                 
                 last_action = await redis_store.client.get(cooldown_key)
                 if last_action == "scale_up" and action == "scale_down":
@@ -731,7 +908,6 @@ async def run_redis_mode(args):
                     if decision.outcome in (GovernanceOutcome.APPROVED, GovernanceOutcome.APPROVED_WITH_CAP, GovernanceOutcome.ESCALATED_TO_LLM):
                         await redis_store.client.setex(cooldown_key, 300, action)
 
-
                 # Print to terminal
                 print_decision(decision, payload)
 
@@ -739,9 +915,10 @@ async def run_redis_mode(args):
                 # Redis Streams require string values; lists must be JSON-encoded.
                 gov_dict = asdict(decision)
                 gov_dict["flags"] = json.dumps(gov_dict["flags"])  # list → JSON string
-                gov_dict["outcome"] = str(gov_dict["outcome"])
+                # Use .value to get plain string (e.g. "APPROVED") not enum representation (issue #1)
+                gov_dict["outcome"] = decision.outcome.value
                 # Copy pod identity fields from incoming payload for traceability
-                for field in ("namespace", "pod", "container"):
+                for field in ("namespace", "pod", "container", "recommended_action"):
                     if field in payload:
                         gov_dict[field] = payload[field]
 
@@ -751,7 +928,7 @@ async def run_redis_mode(args):
                 )
                 logger.info(
                     f"Published governance decision to stream:governance:complete "
-                    f"(outcome={decision.outcome}, replicas={decision.approved_replicas}, "
+                    f"(outcome={decision.outcome.value}, replicas={decision.approved_replicas}, "
                     f"ID={out_id})\n"
                 )
 
@@ -775,7 +952,14 @@ async def async_main(args):
             payload = json.load(f)
 
         # Run governance
-        agent    = GovernanceAgent(groq_api_key=args.groq_key)
+        agent = GovernanceAgent(
+            llm_provider=args.llm_provider,
+            gemini_api_key=args.gemini_key,
+            gemini_model=args.gemini_model,
+            hosted_llm_url=args.hosted_llm_url,
+            hosted_llm_model=args.hosted_llm_model,
+            hosted_llm_api_key=args.hosted_llm_api_key,
+        )
         decision = await agent.run(payload)
 
         # Print to terminal
@@ -840,10 +1024,44 @@ def main():
         help="Redis port",
     )
     parser.add_argument(
-        "--groq-key",
+        "--llm-provider",
         type=str,
-        default=os.environ.get("GROQ_API_KEY"),
-        help="Groq API Key (default: $GROQ_API_KEY)",
+        choices=["gemini", "hosted", "local"],
+        default=os.environ.get("AGENT4_LLM_PROVIDER", "gemini"),
+        help="LLM backend: gemini, hosted, or local (default: $AGENT4_LLM_PROVIDER or gemini)",
+    )
+    parser.add_argument(
+        "--gemini-key",  # Changed from --groq-key
+        type=str,
+        default=os.environ.get("GEMINI_API_KEY"),
+        help="Google Gemini API Key (default: $GEMINI_API_KEY)",
+    )
+    parser.add_argument(
+        "--gemini-model",
+        type=str,
+        default=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
+        help="Gemini model name (default: $GEMINI_MODEL or gemini-2.0-flash)",
+    )
+    parser.add_argument(
+        "--hosted-llm-url",
+        type=str,
+        default=os.environ.get(
+            "HOSTED_LLM_URL",
+            "https://elian-isochimal-kathaleen.ngrok-free.dev",
+        ),
+        help="Hosted OpenAI-compatible LLM base URL (default: $HOSTED_LLM_URL or your ngrok URL)",
+    )
+    parser.add_argument(
+        "--hosted-llm-model",
+        type=str,
+        default=os.environ.get("HOSTED_LLM_MODEL", "gemma4:12b"),
+        help="Hosted LLM model name (default: $HOSTED_LLM_MODEL or gemma4:12b)",
+    )
+    parser.add_argument(
+        "--hosted-llm-api-key",
+        type=str,
+        default=os.environ.get("HOSTED_LLM_API_KEY"),
+        help="Optional bearer token for hosted LLM (default: $HOSTED_LLM_API_KEY)",
     )
     args = parser.parse_args()
 

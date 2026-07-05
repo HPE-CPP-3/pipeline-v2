@@ -31,8 +31,9 @@ class ThrottleRiskCalculator:
         self.current_throttle_ratio_high = config.get(
             "current_throttle_ratio_high", 0.1
         )
+        self.horizon = config.get("horizon", 5)
 
-        logger.info("Initialized ThrottleRiskCalculator")
+        logger.info(f"Initialized ThrottleRiskCalculator with target horizon={self.horizon}m")
 
     def calculate_risk(
         self,
@@ -67,15 +68,15 @@ class ThrottleRiskCalculator:
                 "reason": "No CPU limit set",
             }
 
-        # Get p90 forecast for 15min horizon (most relevant)
-        p90_15min = cpu_forecast.get(15, {}).get(0.9, 0.0)
-        p90_10min = cpu_forecast.get(10, {}).get(0.9, 0.0)
+        # Get p90 forecast for target and other horizons
+        p90_target = cpu_forecast.get(self.horizon, {}).get(0.9, 0.0)
         p90_5min = cpu_forecast.get(5, {}).get(0.9, 0.0)
+        p90_10min = cpu_forecast.get(10, {}).get(0.9, 0.0)
+        p90_15min = cpu_forecast.get(15, {}).get(0.9, 0.0)
 
         # Calculate ratios
+        ratio_target = p90_target / cpu_limit
         ratio_15min = p90_15min / cpu_limit
-        ratio_10min = p90_10min / cpu_limit
-        ratio_5min = p90_5min / cpu_limit
 
         # Determine risk level
         risk_level = "LOW"
@@ -85,23 +86,23 @@ class ThrottleRiskCalculator:
         time_to_throttle = None
 
         # Critical: p90 forecast >= 95% of limit
-        if ratio_15min >= self.critical_ratio:
+        if ratio_target >= self.critical_ratio:
             risk_level = "CRITICAL"
             will_throttle = True
             probability = 0.95
             confidence = 0.9
-            time_to_throttle = "5-15min"
+            time_to_throttle = f"<{self.horizon}min"
 
         # High: p90 forecast >= 85% of limit
-        elif ratio_15min >= self.high_ratio:
+        elif ratio_target >= self.high_ratio:
             risk_level = "HIGH"
             will_throttle = True
             probability = 0.8
             confidence = 0.8
-            time_to_throttle = "10-15min"
+            time_to_throttle = f"5-{self.horizon}min" if self.horizon > 5 else f"<{self.horizon}min"
 
         # Medium: p90 forecast >= 70% of limit OR high current throttling
-        elif ratio_15min >= 0.7 or (
+        elif ratio_target >= 0.7 or (
             current_throttle_ratio
             and current_throttle_ratio > self.current_throttle_ratio_high
         ):
@@ -109,21 +110,21 @@ class ThrottleRiskCalculator:
             will_throttle = False
             probability = 0.5
             confidence = 0.7
-            time_to_throttle = "15+min"
+            time_to_throttle = f"{self.horizon}+min"
 
         # Spike-aware escalation for near-saturation workloads
-        if recent_cpu_spike and recent_cpu_spike > 10.0 and ratio_15min >= 0.8:
+        if recent_cpu_spike and recent_cpu_spike > 10.0 and ratio_target >= 0.8:
             if risk_level == "MEDIUM":
                 risk_level = "HIGH"
                 will_throttle = True
                 probability = max(probability, 0.8)
                 confidence = max(confidence, 0.75)
-                time_to_throttle = "5-15min"
+                time_to_throttle = f"5-{self.horizon}min" if self.horizon > 5 else f"<{self.horizon}min"
 
         # Calculate confidence based on forecast spread
         if risk_level != "LOW":
-            p50_15min = cpu_forecast.get(15, {}).get(0.5, 0.0)
-            spread = (p90_15min - p50_15min) / (p50_15min + 1e-6)
+            p50_target = cpu_forecast.get(self.horizon, {}).get(0.5, 0.0)
+            spread = (p90_target - p50_target) / (p50_target + 1e-6)
 
             # Lower spread = higher confidence
             if spread < 0.1:
@@ -132,7 +133,7 @@ class ThrottleRiskCalculator:
                 confidence = max(confidence - 0.1, 0.3)
 
         # Determine reason
-        reason = f"p90 forecast {p90_15min:.2f} cores / {cpu_limit:.2f} limit ({ratio_15min:.1%})"
+        reason = f"p90 forecast {p90_target:.2f} cores / {cpu_limit:.2f} limit ({ratio_target:.1%})"
         if (
             current_throttle_ratio
             and current_throttle_ratio > self.current_throttle_ratio_high
@@ -151,6 +152,7 @@ class ThrottleRiskCalculator:
                 "p90_10min": p90_10min,
                 "p90_15min": p90_15min,
                 "ratio_15min": ratio_15min,
+                "ratio_target": ratio_target,
                 "current_throttle_ratio": current_throttle_ratio,
                 "recent_cpu_spike": recent_cpu_spike,
             },
