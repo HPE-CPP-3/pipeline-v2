@@ -81,7 +81,7 @@ pypy-*/
 *.h5
 *.pth
 *.pt
-*.gguf
+
 
 # Logs
 *.log
